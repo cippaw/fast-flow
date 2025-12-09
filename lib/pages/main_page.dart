@@ -16,7 +16,7 @@ class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
 
   final List<Widget> _pages = const [
-    HomeScreen(username: ''),
+    HomeScreen(),
     LocationPage(),
     CountdownPage(),
     InfaqPage(),

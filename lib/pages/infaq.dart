@@ -122,7 +122,7 @@ class _InfaqPageState extends State<InfaqPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.white.withOpacity(0.06),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
