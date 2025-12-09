@@ -37,7 +37,7 @@ class _CountdownPageState extends State<CountdownPage> {
 
   late Box _fastingBox;
   late Box _sessionBox;
-
+  
   String? get _currentUserEmail => AuthService().currentEmail;
 
   @override
@@ -149,11 +149,10 @@ class _CountdownPageState extends State<CountdownPage> {
   // PERBAIKAN: Tambahkan prefix email untuk isolasi data per user
   Future<void> _autoMarkFastingDay() async {
     if (_currentUserEmail == null) return;
-
+    
     try {
       final today = DateTime.now();
-      final key =
-          '${_currentUserEmail}_${DateFormat('yyyy-MM-dd').format(today)}';
+      final key = '${_currentUserEmail}_${DateFormat('yyyy-MM-dd').format(today)}';
 
       // Mark as fasting day
       await _fastingBox.put(key, true);
@@ -258,151 +257,257 @@ class _CountdownPageState extends State<CountdownPage> {
 
     return Scaffold(
       backgroundColor: cream,
-      appBar: AppBar(
-        title: const Text('Countdown Menuju Berbuka'),
-        centerTitle: true,
-        backgroundColor: darkGreen,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(color: darkGreen.withOpacity(0.06), blurRadius: 14)
-                ],
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 100,
+            floating: false,
+            pinned: true,
+            backgroundColor: darkGreen,
+            flexibleSpace: FlexibleSpaceBar(
+              title: const Text(
+                'Countdown Berbuka',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              child: Column(
-                children: [
-                  Text('Menuju Berbuka',
-                      style: TextStyle(
-                          color: softGreen, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 16),
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [darkGreen, softGreen],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.all(18),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+              delegate: SliverChildListDelegate([
+                // Main Countdown Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: darkGreen.withOpacity(0.1),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.access_time, color: softGreen, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Menuju Waktu Berbuka',
+                            style: TextStyle(
+                              color: softGreen,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
 
-                  // circular progress + time
-                  SizedBox(
-                    width: 220,
-                    height: 220,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          width: 220,
-                          height: 220,
-                          child: CircularProgressIndicator(
-                            value: 1.0,
-                            strokeWidth: 18,
-                            color: beige,
-                          ),
-                        ),
-                        SizedBox(
-                          width: 220,
-                          height: 220,
-                          child: CircularProgressIndicator(
-                            value: progress,
-                            strokeWidth: 18,
-                            color: softGreen,
-                            backgroundColor: beige,
-                          ),
-                        ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
+                      // Circular Progress with Time
+                      SizedBox(
+                        width: 240,
+                        height: 240,
+                        child: Stack(
+                          alignment: Alignment.center,
                           children: [
-                            Text(formattedTime,
-                                style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: darkGreen)),
-                            const SizedBox(height: 6),
-                            Text('Maghrib $maghribDisplay',
-                                style: TextStyle(
-                                    color: darkGreen.withOpacity(0.75))),
-                            const SizedBox(height: 6),
-                            Text(selectedZone,
-                                style: const TextStyle(fontSize: 12)),
+                            // Background circle
+                            SizedBox(
+                              width: 240,
+                              height: 240,
+                              child: CircularProgressIndicator(
+                                value: 1.0,
+                                strokeWidth: 20,
+                                color: beige,
+                              ),
+                            ),
+                            // Progress circle
+                            SizedBox(
+                              width: 240,
+                              height: 240,
+                              child: CircularProgressIndicator(
+                                value: progress,
+                                strokeWidth: 20,
+                                color: softGreen,
+                                backgroundColor: beige,
+                                strokeCap: StrokeCap.round,
+                              ),
+                            ),
+                            // Center content
+                            Container(
+                              width: 180,
+                              height: 180,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 10,
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    formattedTime,
+                                    style: const TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.bold,
+                                      color: darkGreen,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: softGreen.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'Maghrib $maghribDisplay',
+                                      style: TextStyle(
+                                        color: darkGreen.withOpacity(0.8),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    selectedZone,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
 
-                  const SizedBox(height: 18),
+                      const SizedBox(height: 24),
 
-                  // timezone dropdown
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('Zona: ',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                      const SizedBox(width: 8),
+                      // Timezone Dropdown
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: beige,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedZone,
-                            items: TimezoneService.zoneMap.keys
-                                .map((k) => DropdownMenuItem(
-                                    value: k,
-                                    child: Text(k,
-                                        style: const TextStyle(fontSize: 13))))
-                                .toList(),
-                            onChanged: (v) => _onZoneChanged(v),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.public, size: 18, color: darkGreen),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Zona:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: selectedZone,
+                                    isExpanded: true,
+                                    items: TimezoneService.zoneMap.keys
+                                        .map((k) => DropdownMenuItem(
+                                            value: k,
+                                            child: Text(k,
+                                                style: const TextStyle(fontSize: 13))))
+                                        .toList(),
+                                    onChanged: (v) => _onZoneChanged(v),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      _buildControlButtons(),
+
+                      const SizedBox(height: 16),
+
+                      if (maybeTargetUtc != null)
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
                           ),
+                          child: Text(
+                            'Target (UTC): ${DateFormat('yyyy-MM-dd HH:mm').format(maybeTargetUtc.toUtc())}',
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          ),
+                        ),
+
+                      const SizedBox(height: 12),
+
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade100),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Countdown akan otomatis menandai hari puasa di kalender saat selesai',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue.shade700,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 16),
-
-                  _buildControlButtons(),
-
-                  const SizedBox(height: 12),
-
-                  if (maybeTargetUtc != null)
-                    Text(
-                      'Target (UTC): ${DateFormat('yyyy-MM-dd HH:mm').format(maybeTargetUtc.toUtc())}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-
-                  const SizedBox(height: 8),
-
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: beige,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, size: 16, color: darkGreen),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Countdown akan otomatis menandai hari puasa di kalender saat selesai',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: darkGreen.withOpacity(0.8)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ]),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
