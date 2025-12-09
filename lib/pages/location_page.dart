@@ -790,8 +790,7 @@ class _LocationPageState extends State<LocationPage> {
                                             } catch (_) {}
                                           }
                                         },
-                                        icon: const Icon(
-                                            Icons.pin_drop_outlined,
+                                        icon: const Icon(Icons.my_location,
                                             size: 18),
                                         label: const Text('Pusatkan Peta'),
                                         style: ElevatedButton.styleFrom(
@@ -845,24 +844,35 @@ class _LocationPageState extends State<LocationPage> {
   }
 
   Widget _modernPrayerTime(String label, String time, IconData icon) {
-    return Column(children: [
-      Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: _darkGreen.withOpacity(0.1),
-          shape: BoxShape.circle,
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: _darkGreen.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: _darkGreen, size: 18),
         ),
-        child: Icon(icon, color: _darkGreen, size: 18),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        label,
-        style: TextStyle(
-          color: Colors.grey[600],
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey[600],
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
         ),
-      ),
-    ]);
+        const SizedBox(height: 4),
+        Text(
+          time,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: _darkGreen,
+          ),
+        ),
+      ],
+    );
   }
 }

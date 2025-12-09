@@ -1,7 +1,6 @@
 // lib/pages/countdown_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:timezone/timezone.dart' as tz;
 import 'package:intl/intl.dart';
 import 'package:hive/hive.dart';
 import 'package:fast_flow/services/timezone_service.dart';
@@ -9,6 +8,7 @@ import 'package:fast_flow/services/auth_service.dart';
 
 const Color darkGreen = Color(0xFF0F3D2E);
 const Color softGreen = Color(0xFF1F6F54);
+const Color lightGreen = Color(0xFF4FB477);
 const Color cream = Color(0xFFF6F1EB);
 const Color beige = Color(0xFFEADFD5);
 
@@ -24,7 +24,7 @@ class _CountdownPageState extends State<CountdownPage> {
 
   Duration _remainingTime = Duration.zero;
   String formattedTime = "--:--:--";
-  String maghribTime = "17:55"; // default maghrib Jakarta
+  String maghribTime = "17:55";
   bool _running = false;
 
   double progress = 0.0;
@@ -37,7 +37,7 @@ class _CountdownPageState extends State<CountdownPage> {
 
   late Box _fastingBox;
   late Box _sessionBox;
-  
+
   String? get _currentUserEmail => AuthService().currentEmail;
 
   @override
@@ -46,10 +46,8 @@ class _CountdownPageState extends State<CountdownPage> {
     _fastingBox = Hive.box('fastingBox');
     _sessionBox = Hive.box('session');
 
-    // Load selected zone from service
     selectedZone = _tzService.getSelectedZone();
 
-    // Load maghrib time from session if available
     final savedMaghrib = _sessionBox.get('maghrib') as String?;
     if (savedMaghrib != null && savedMaghrib.isNotEmpty) {
       maghribTime = savedMaghrib;
@@ -124,7 +122,6 @@ class _CountdownPageState extends State<CountdownPage> {
           progress = 1.0;
         });
 
-        // Auto mark fasting day
         _autoMarkFastingDay();
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -146,16 +143,17 @@ class _CountdownPageState extends State<CountdownPage> {
     });
   }
 
-  // PERBAIKAN: Tambahkan prefix email untuk isolasi data per user
   Future<void> _autoMarkFastingDay() async {
     if (_currentUserEmail == null) return;
-    
+
     try {
       final today = DateTime.now();
-      final key = '${_currentUserEmail}_${DateFormat('yyyy-MM-dd').format(today)}';
+      final key =
+          '${_currentUserEmail}_${DateFormat('yyyy-MM-dd').format(today)}';
 
-      // Mark as fasting day
-      await _fastingBox.put(key, true);
+      await _fastingBox.put(key, {
+        'types': ['Umum']
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -212,36 +210,41 @@ class _CountdownPageState extends State<CountdownPage> {
       children: [
         ElevatedButton.icon(
           onPressed: _running ? null : _onStartPressed,
-          icon: const Icon(Icons.play_arrow),
-          label: const Text('Start'),
+          icon: const Icon(Icons.play_arrow, color: Colors.white),
+          label: const Text('Start', style: TextStyle(color: Colors.white)),
           style: ElevatedButton.styleFrom(
             backgroundColor: darkGreen,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            disabledBackgroundColor: darkGreen.withOpacity(0.5),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 2,
           ),
         ),
         const SizedBox(width: 12),
         ElevatedButton.icon(
           onPressed: _running ? _onStopPressed : null,
-          icon: const Icon(Icons.stop),
-          label: const Text('Stop'),
+          icon: const Icon(Icons.stop, color: Colors.white),
+          label: const Text('Stop', style: TextStyle(color: Colors.white)),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.redAccent,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            disabledBackgroundColor: Colors.redAccent.withOpacity(0.5),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 2,
           ),
         ),
         const SizedBox(width: 12),
-        OutlinedButton(
+        OutlinedButton.icon(
           onPressed: _onResetPressed,
-          child: const Text('Reset'),
+          icon: Icon(Icons.refresh, color: darkGreen),
+          label: Text('Reset', style: TextStyle(color: darkGreen)),
           style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            side: BorderSide(color: darkGreen.withOpacity(0.2)),
+            side: BorderSide(color: darkGreen.withOpacity(0.5), width: 1.5),
           ),
         ),
       ],
@@ -260,19 +263,19 @@ class _CountdownPageState extends State<CountdownPage> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 100,
+            expandedHeight: 120,
             floating: false,
             pinned: true,
             backgroundColor: darkGreen,
             flexibleSpace: FlexibleSpaceBar(
               title: const Text(
                 'Countdown Berbuka',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [darkGreen, softGreen],
+                    colors: [darkGreen, lightGreen],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -284,8 +287,7 @@ class _CountdownPageState extends State<CountdownPage> {
             padding: const EdgeInsets.all(18),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-              delegate: SliverChildListDelegate([
-                // Main Countdown Card
+                // Main Card
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
@@ -294,39 +296,27 @@ class _CountdownPageState extends State<CountdownPage> {
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: darkGreen.withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      )
+                          color: darkGreen.withOpacity(0.1),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8))
                     ],
                   ),
                   child: Column(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.access_time, color: softGreen, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Menuju Waktu Berbuka',
-                            style: TextStyle(
+                      Text('Menuju Berbuka',
+                          style: TextStyle(
                               color: softGreen,
                               fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
+                              fontSize: 18)),
                       const SizedBox(height: 24),
 
-                      // Circular Progress with Time
+                      // Circular Progress
                       SizedBox(
                         width: 240,
                         height: 240,
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
-                            // Background circle
                             SizedBox(
                               width: 240,
                               height: 240,
@@ -336,72 +326,87 @@ class _CountdownPageState extends State<CountdownPage> {
                                 color: beige,
                               ),
                             ),
-                            // Progress circle
                             SizedBox(
                               width: 240,
                               height: 240,
                               child: CircularProgressIndicator(
                                 value: progress,
                                 strokeWidth: 20,
-                                color: softGreen,
-                                backgroundColor: beige,
-                                strokeCap: StrokeCap.round,
+                                color: lightGreen,
+                                backgroundColor: Colors.transparent,
                               ),
                             ),
-                            // Center content
-                            Container(
-                              width: 180,
-                              height: 180,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 10,
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    formattedTime,
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(formattedTime,
                                     style: const TextStyle(
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.bold,
-                                      color: darkGreen,
-                                      letterSpacing: 1,
-                                    ),
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.bold,
+                                        color: darkGreen,
+                                        letterSpacing: 1)),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: lightGreen.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(20),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: softGreen.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      'Maghrib $maghribDisplay',
-                                      style: TextStyle(
-                                        color: darkGreen.withOpacity(0.8),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.nights_stay,
+                                          color: darkGreen, size: 16),
+                                      const SizedBox(width: 8),
+                                      Text('Maghrib $maghribDisplay',
+                                          style: TextStyle(
+                                              color: darkGreen,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14)),
+                                    ],
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    selectedZone,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(selectedZone,
                                     style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
+                                        fontSize: 12, color: Colors.grey[600])),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      // Timezone Selector
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: cream,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: darkGreen.withOpacity(0.1)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.public, color: darkGreen, size: 20),
+                            const SizedBox(width: 12),
+                            const Text('Zona: ',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
+                            const SizedBox(width: 8),
+                            DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: selectedZone,
+                                items: TimezoneService.zoneMap.keys
+                                    .map((k) => DropdownMenuItem(
+                                        value: k,
+                                        child: Text(k,
+                                            style:
+                                                const TextStyle(fontSize: 13))))
+                                    .toList(),
+                                onChanged: (v) => _onZoneChanged(v),
                               ),
                             ),
                           ],
@@ -410,92 +415,53 @@ class _CountdownPageState extends State<CountdownPage> {
 
                       const SizedBox(height: 24),
 
-                      // Timezone Dropdown
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: beige,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.public, size: 18, color: darkGreen),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Zona:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Flexible(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: selectedZone,
-                                    isExpanded: true,
-                                    items: TimezoneService.zoneMap.keys
-                                        .map((k) => DropdownMenuItem(
-                                            value: k,
-                                            child: Text(k,
-                                                style: const TextStyle(fontSize: 13))))
-                                        .toList(),
-                                    onChanged: (v) => _onZoneChanged(v),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      _buildControlButtons(),
 
                       const SizedBox(height: 20),
 
-                      _buildControlButtons(),
-
-                      const SizedBox(height: 16),
-
                       if (maybeTargetUtc != null)
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Text(
-                            'Target (UTC): ${DateFormat('yyyy-MM-dd HH:mm').format(maybeTargetUtc.toUtc())}',
-                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          child: Row(
+                            children: [
+                              Icon(Icons.schedule,
+                                  size: 16, color: Colors.blue.shade700),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Target: ${DateFormat('HH:mm').format(maybeTargetUtc.toLocal())}',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.blue.shade700),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
 
                       const SizedBox(height: 12),
 
                       Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue.shade100),
+                          color: lightGreen.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
-                            const SizedBox(width: 10),
+                            Icon(Icons.info_outline,
+                                size: 16, color: darkGreen),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'Countdown akan otomatis menandai hari puasa di kalender saat selesai',
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blue.shade700,
-                                  height: 1.4,
-                                ),
+                                    fontSize: 12,
+                                    color: darkGreen.withOpacity(0.8)),
                               ),
                             ),
                           ],
@@ -504,7 +470,83 @@ class _CountdownPageState extends State<CountdownPage> {
                     ],
                   ),
                 ),
+
+                const SizedBox(height: 20),
+
+                // Info Card
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        darkGreen.withOpacity(0.1),
+                        lightGreen.withOpacity(0.05)
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: lightGreen,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.lightbulb,
+                                color: Colors.white, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Tips Menunggu Berbuka',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _buildTipItem('Perbanyak dzikir dan doa'),
+                      _buildTipItem('Baca Al-Qur\'an'),
+                      _buildTipItem('Siapkan makanan berbuka'),
+                      _buildTipItem('Istirahat yang cukup'),
+                    ],
+                  ),
+                ),
               ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTipItem(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: lightGreen,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: darkGreen.withOpacity(0.8),
+                fontSize: 13,
+              ),
             ),
           ),
         ],

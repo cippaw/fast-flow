@@ -14,195 +14,140 @@ class FastingHistoryPage extends StatefulWidget {
 class _FastingHistoryPageState extends State<FastingHistoryPage> {
   late Box _fastingBox;
   late Box _notesBox;
-  List<Map<String, dynamic>> _fastingEntries = [];
+  List<MapEntry<String, dynamic>> _entries = [];
 
   String? get _currentUserEmail => AuthService().currentEmail;
-
-  // Colors
-  final Color _darkGreen = const Color(0xFF0B3D2E);
-  final Color _lightGreen = const Color(0xFF4FB477);
-  final Color _cream = const Color(0xFFF6F0E8);
-  final Color _gold = const Color(0xFFD4A548);
 
   @override
   void initState() {
     super.initState();
     _fastingBox = Hive.box('fastingBox');
     _notesBox = Hive.box('fastingNotes');
-    _loadFastingData();
-
-    // Listen to box changes
-    _fastingBox.watch().listen((_) => _loadFastingData());
-    _notesBox.watch().listen((_) => _loadFastingData());
+    _loadEntries();
+    _fastingBox.watch().listen((_) => _loadEntries());
   }
 
-  void _loadFastingData() {
+  void _loadEntries() {
     if (_currentUserEmail == null) {
-      setState(() => _fastingEntries = []);
+      setState(() => _entries = []);
       return;
     }
 
-    final entries = <Map<String, dynamic>>[];
     final prefix = '${_currentUserEmail}_';
+    final allKeys = _fastingBox.keys.cast<String>().toList();
 
-    // Iterate through all keys in fastingBox
-    for (var key in _fastingBox.keys) {
-      final keyStr = key.toString();
+    final userEntries = <MapEntry<String, dynamic>>[];
 
-      // Check if key belongs to current user
-      if (keyStr.startsWith(prefix)) {
-        final dateKey = keyStr.substring(prefix.length);
-
-        // Try to parse date
-        try {
-          final date = DateTime.parse(dateKey);
-          final data = _fastingBox.get(key);
-
-          List<String> types = [];
-          bool hasFasting = false;
-
-          if (data is bool && data == true) {
-            hasFasting = true;
-            types = ['Umum'];
-          } else if (data is Map) {
-            final typesList = data['types'] as List?;
-            if (typesList != null && typesList.isNotEmpty) {
-              types = typesList.map((e) => e.toString()).toList();
-              hasFasting = true;
-            }
-          }
-
-          if (hasFasting) {
-            // Get notes
-            final note = _notesBox.get(key) as String?;
-
-            entries.add({
-              'key': key,
-              'date': date,
-              'dateKey': dateKey,
-              'types': types,
-              'note': note ?? '',
-            });
-          }
-        } catch (e) {
-          // Skip invalid date keys
-          continue;
+    for (final key in allKeys) {
+      if (key.startsWith(prefix)) {
+        final value = _fastingBox.get(key);
+        if (value != null) {
+          // Extract date dari key (format: email_yyyy-MM-dd)
+          final dateStr = key.substring(prefix.length);
+          userEntries.add(MapEntry(dateStr, value));
         }
       }
     }
 
-    // Sort by date descending (newest first)
-    entries.sort(
-        (a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    // Sort descending (newest first)
+    userEntries.sort((a, b) => b.key.compareTo(a.key));
 
-    setState(() => _fastingEntries = entries);
+    setState(() => _entries = userEntries);
   }
 
-  Future<void> _deleteEntry(Map<String, dynamic> entry) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Hapus Tanda Puasa?'),
-        content: Text(
-          'Menghapus data puasa untuk tanggal ${DateFormat('d MMMM yyyy', 'id_ID').format(entry['date'])}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Hapus'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _deleteEntry(String dateKey) async {
+    if (_currentUserEmail == null) return;
 
-    if (confirmed == true) {
-      await _fastingBox.delete(entry['key']);
-      await _notesBox.delete(entry['key']);
-      _loadFastingData();
+    final fullKey = '${_currentUserEmail}_$dateKey';
+    await _fastingBox.delete(fullKey);
+    await _notesBox.delete(fullKey);
+    _loadEntries();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Data puasa berhasil dihapus'),
-            backgroundColor: _lightGreen,
-          ),
-        );
-      }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Data puasa berhasil dihapus')),
+      );
     }
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.calendar_month_outlined,
-              size: 80, color: Colors.grey[300]),
-          const SizedBox(height: 16),
-          Text(
-            'Belum Ada Riwayat Puasa',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tandai hari puasa di kalender\nuntuk melihat riwayatnya di sini',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
-      ),
-    );
+  List<String> _getTypesFromValue(dynamic value) {
+    if (value == null) return [];
+
+    if (value is bool) {
+      return value ? ['Umum'] : [];
+    }
+
+    if (value is Map) {
+      final types = (value['types'] as List?)?.cast<String>() ?? [];
+      return types;
+    }
+
+    return [];
   }
 
   @override
   Widget build(BuildContext context) {
+    final primaryGreen = const Color(0xFF0b5a3a);
+    final lightGreen = const Color(0xFF4FB477);
+    final cream = const Color(0xFFF5F5F0);
+
     return Scaffold(
-      backgroundColor: _cream,
+      backgroundColor: cream,
       appBar: AppBar(
         title: const Text('Riwayat Puasa'),
         centerTitle: true,
-        backgroundColor: _darkGreen,
+        backgroundColor: primaryGreen,
         elevation: 0,
-        actions: [
-          if (_fastingEntries.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _loadFastingData,
-              tooltip: 'Refresh',
-            ),
-        ],
       ),
-      body: _fastingEntries.isEmpty
-          ? _buildEmptyState()
-          : ListView.builder(
+      body: _entries.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.calendar_today_outlined,
+                      size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Belum ada riwayat puasa',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tandai hari puasa di kalender\nuntuk melihat riwayat',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ListView.separated(
               padding: const EdgeInsets.all(16),
-              itemCount: _fastingEntries.length,
-              itemBuilder: (context, index) {
-                final entry = _fastingEntries[index];
-                final date = entry['date'] as DateTime;
-                final types = entry['types'] as List<String>;
-                final note = entry['note'] as String;
+              itemCount: _entries.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, idx) {
+                final entry = _entries[idx];
+                final dateKey = entry.key;
+                final value = entry.value;
+
+                DateTime dt;
+                try {
+                  dt = DateTime.parse(dateKey);
+                } catch (_) {
+                  dt = DateTime.now();
+                }
+
+                final types = _getTypesFromValue(value);
+                final fullKey = '${_currentUserEmail}_$dateKey';
+                final note = _notesBox.get(fullKey) as String?;
 
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
@@ -215,113 +160,135 @@ class _FastingHistoryPageState extends State<FastingHistoryPage> {
                     ],
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ListTile(
                         contentPadding: const EdgeInsets.all(16),
                         leading: Container(
-                          width: 56,
-                          height: 56,
+                          width: 50,
+                          height: 50,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [_lightGreen, _darkGreen],
+                              colors: [primaryGreen, lightGreen],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                DateFormat('d').format(date),
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
+                          child: Center(
+                            child: Text(
+                              '${dt.day}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
                               ),
-                              Text(
-                                DateFormat('MMM', 'id_ID').format(date),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.white70,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                         title: Text(
-                          DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(date),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: _darkGreen,
+                          DateFormat('EEEE', 'id_ID').format(dt),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
                           ),
                         ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: types.map((type) {
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _lightGreen.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: _lightGreen.withOpacity(0.4),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    type,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: _darkGreen,
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                            if (note.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: _gold.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
+                        subtitle: Text(
+                          DateFormat('d MMMM yyyy', 'id_ID').format(dt),
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (v) async {
+                            if (v == 'delete') {
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Hapus Riwayat Puasa?'),
+                                  content: const Text(
+                                      'Data akan dihapus permanen. Lanjutkan?'),
+                                  actions: [
+                                    TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
+                                        child: const Text('Batal')),
+                                    ElevatedButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
+                                        style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.redAccent),
+                                        child: const Text('Hapus')),
+                                  ],
                                 ),
+                              );
+                              if (ok == true) _deleteEntry(dateKey);
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
+                                value: 'delete',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.note, size: 14, color: _gold),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        note,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[700],
+                                    Icon(Icons.delete_outline,
+                                        color: Colors.redAccent),
+                                    SizedBox(width: 8),
+                                    Text('Hapus'),
+                                  ],
+                                )),
+                          ],
+                        ),
+                      ),
+                      if (types.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: types
+                                .map((type) => Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: lightGreen.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: lightGreen.withOpacity(0.3),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                      child: Text(
+                                        type,
+                                        style: TextStyle(
+                                          color: primaryGreen,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ))
+                                .toList(),
+                          ),
+                        ),
+                      if (note != null && note.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.note,
+                                  color: Colors.amber[700], size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  note,
+                                  style: const TextStyle(fontSize: 13),
                                 ),
                               ),
                             ],
-                          ],
+                          ),
                         ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.redAccent),
-                          onPressed: () => _deleteEntry(entry),
-                        ),
-                      ),
                     ],
                   ),
                 );
