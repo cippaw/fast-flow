@@ -44,7 +44,7 @@ class _MainPageState extends State<MainPage> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: const Color.fromARGB(255, 3, 62, 17).withOpacity(0.1),
               blurRadius: 10,
               offset: const Offset(0, -3),
             ),
@@ -53,10 +53,10 @@ class _MainPageState extends State<MainPage> {
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
-          backgroundColor: Colors.transparent,
+          backgroundColor: const Color.fromARGB(0, 201, 196, 196),
           elevation: 0,
           selectedItemColor: colors.primary,
-          unselectedItemColor: Colors.grey,
+          unselectedItemColor: const Color.fromARGB(255, 246, 225, 181),
           showUnselectedLabels: true,
           type: BottomNavigationBarType.fixed,
           items: const [
