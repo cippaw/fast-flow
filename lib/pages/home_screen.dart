@@ -17,6 +17,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final Color primaryGreen = const Color(0xFF0b5a3a);
+  final Color lightGreen = const Color(0xFF4FB477);
   final Color accentGold = const Color(0xFFD0A84D);
   final Color bgBeige = const Color(0xFFF5F5F0);
 
@@ -43,6 +44,13 @@ class _HomeScreenState extends State<HomeScreen> {
   final TimezoneService _tzService = TimezoneService();
 
   String _recommendation = 'Perbanyak amal sholeh';
+  final List<String> _quotes = [
+    'Setiap hari adalah kesempatan untuk memperbaiki diri.',
+    'Puasa adalah perisai dari api neraka.',
+    'Barangsiapa berpuasa Ramadhan dengan iman dan mengharap pahala, diampuni dosa-dosanya yang telah lalu.',
+    'Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain.',
+  ];
+  String _currentQuote = '';
 
   @override
   void initState() {
@@ -52,8 +60,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _notesBox = Hive.box('fastingNotes');
     _sessionBox = Hive.box('session');
 
-    // Load selected zone
     _selectedZoneLabel = _tzService.getSelectedZone();
+    _currentQuote = _quotes[DateTime.now().day % _quotes.length];
 
     final auth = AuthService();
     _email = auth.currentEmail;
@@ -62,61 +70,76 @@ class _HomeScreenState extends State<HomeScreen> {
       if (u != null && u['username'] != null) _username = u['username'];
     }
 
+    _loadPrayerTimesFromSession();
     _fetchTodayPrayerTimes();
+  }
+
+  void _loadPrayerTimesFromSession() {
+    try {
+      _imsak = _sessionBox.get('imsak', defaultValue: '--:--');
+      _subuh = _sessionBox.get('subuh', defaultValue: '--:--');
+      _maghrib = _sessionBox.get('maghrib', defaultValue: '--:--');
+      setState(() {});
+    } catch (_) {}
   }
 
   String _ymd(DateTime dt) => DateFormat('yyyy-MM-dd').format(dt);
 
-  bool isFastingDay(DateTime day) {
+  // Get multiple fasting types for a date
+  Map<String, dynamic> getFastingData(DateTime day) {
     final k = _ymd(day);
-    return _fastingBox.get(k, defaultValue: false) as bool? ?? false;
+    final data = _fastingBox.get(k);
+
+    if (data == null) return {'hasFasting': false, 'types': []};
+
+    if (data is bool) {
+      return {
+        'hasFasting': data,
+        'types': data ? ['Umum'] : []
+      };
+    }
+
+    if (data is Map) {
+      final types = (data['types'] as List?)?.cast<String>() ?? [];
+      return {'hasFasting': types.isNotEmpty, 'types': types};
+    }
+
+    return {'hasFasting': false, 'types': []};
+  }
+
+  bool isFastingDay(DateTime day) {
+    return getFastingData(day)['hasFasting'] as bool;
   }
 
   Future<void> _toggleFasting(DateTime day) async {
     final k = _ymd(day);
-    final cur = isFastingDay(day);
-    if (cur) {
+    final currentData = getFastingData(day);
+    final currentTypes = currentData['types'] as List<String>;
+
+    // Show dialog to select fasting types
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => _FastingTypesDialog(
+        date: day,
+        currentTypes: currentTypes,
+      ),
+    );
+
+    if (result == null) return;
+
+    final types = result['types'] as List<String>;
+    final note = result['note'] as String?;
+
+    if (types.isEmpty) {
       await _fastingBox.delete(k);
       await _notesBox.delete(k);
     } else {
-      final note = await _openReviewDialog(day);
-      await _fastingBox.put(k, true);
+      await _fastingBox.put(k, {'types': types});
       if (note != null && note.trim().isNotEmpty) {
         await _notesBox.put(k, note.trim());
       }
     }
     setState(() {});
-  }
-
-  Future<String?> _openReviewDialog(DateTime day) async {
-    final k = _ymd(day);
-    final existing = _notesBox.get(k) as String? ?? '';
-    final ctrl = TextEditingController(text: existing);
-
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(
-              'Catatan Puasa — ${DateFormat('d MMM yyyy', 'id_ID').format(day)}'),
-          content: TextField(
-            controller: ctrl,
-            maxLines: 4,
-            decoration: const InputDecoration(
-                hintText: 'Tulis kesan / catatan (opsional)'),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, null),
-                child: const Text('Batal')),
-            ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, ctrl.text),
-                style: ElevatedButton.styleFrom(backgroundColor: primaryGreen),
-                child: const Text('Simpan')),
-          ],
-        );
-      },
-    );
   }
 
   Future<void> _fetchTodayPrayerTimes() async {
@@ -139,7 +162,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _subuh = (timings['Fajr'] ?? '--:--').toString();
           _maghrib = (timings['Maghrib'] ?? '--:--').toString();
 
-          // Save to session for countdown
+          _sessionBox.put('imsak', _imsak);
+          _sessionBox.put('subuh', _subuh);
           _sessionBox.put('maghrib', _maghrib);
 
           try {
@@ -192,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       if (buf.isEmpty) {
-        _recommendation = 'Perbanyak amal sholeh';
+        _recommendation = 'Tidak ada puasa sunnah khusus hari ini';
       } else {
         _recommendation = buf.join(' • ');
       }
@@ -202,56 +226,160 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showDateDetail(DateTime day) {
     final k = _ymd(day);
     final note = _notesBox.get(k) as String?;
-    final fasting = isFastingDay(day);
+    final fastingData = getFastingData(day);
+    final fasting = fastingData['hasFasting'] as bool;
+    final types = fastingData['types'] as List<String>;
 
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(14.0),
-          child: Wrap(
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ListTile(
-                title: Text(
-                    DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(day),
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(
-                    fasting ? 'Tandai sebagai hari puasa' : 'Belum ditandai'),
-              ),
-              if (note != null && note.isNotEmpty) ...[
-                const Divider(),
-                const Text('Catatan:',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Text(note),
-              ],
-              const SizedBox(height: 12),
               Row(
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _toggleFasting(day);
-                    },
-                    icon: Icon(fasting ? Icons.delete : Icons.flag,
-                        color: Colors.white),
-                    label: Text(fasting ? 'Hapus tanda puasa' : 'Tandai puasa'),
-                    style:
-                        ElevatedButton.styleFrom(backgroundColor: primaryGreen),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: primaryGreen.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.calendar_today, color: primaryGreen),
                   ),
-                  const SizedBox(width: 10),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      Navigator.pop(ctx);
-                      final note = await _openReviewDialog(day);
-                      if (note != null) {
-                        await _notesBox.put(k, note);
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          DateFormat('EEEE', 'id_ID').format(day),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          DateFormat('d MMMM yyyy', 'id_ID').format(day),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (fasting && types.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: lightGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: lightGreen.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.check_circle, color: lightGreen, size: 20),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Jenis Puasa:',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: types
+                            .map((type) => Chip(
+                                  label: Text(type,
+                                      style: const TextStyle(fontSize: 12)),
+                                  backgroundColor: lightGreen.withOpacity(0.2),
+                                  side: BorderSide.none,
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (note != null && note.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.note, color: Colors.amber[700], size: 20),
+                          const SizedBox(width: 8),
+                          const Text('Catatan:',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(note, style: const TextStyle(height: 1.4)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _toggleFasting(day);
+                      },
+                      icon: Icon(fasting ? Icons.edit : Icons.flag),
+                      label: Text(fasting ? 'Edit Puasa' : 'Tandai Puasa'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryGreen,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (fasting) ...[
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await _fastingBox.delete(k);
+                        await _notesBox.delete(k);
+                        Navigator.pop(ctx);
                         setState(() {});
-                      }
-                    },
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Edit catatan'),
-                  ),
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.all(14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Icon(Icons.delete),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -262,20 +390,33 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget? _markerBuilder(BuildContext ctx, DateTime date, List events) {
-    if (isFastingDay(date)) {
-      return const Positioned(
-        bottom: 6,
-        child: CircleAvatar(radius: 4, backgroundColor: Color(0xFF0b5a3a)),
-      );
-    }
-    return null;
+    final data = getFastingData(date);
+    final types = data['types'] as List<String>;
+
+    if (types.isEmpty) return null;
+
+    return Positioned(
+      bottom: 4,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: types.take(3).map((type) {
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              color: primaryGreen,
+              shape: BoxShape.circle,
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final dateStr = DateFormat('MMMM yyyy', 'id_ID').format(_focusedDay);
-
-    // Convert times to selected zone
     final today = DateTime.now();
     final displayImsak = _tzService.convertTimeFromJakarta(_imsak, today);
     final displaySubuh = _tzService.convertTimeFromJakarta(_subuh, today);
@@ -290,132 +431,242 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Greeting
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Assalamu\'alaikum,',
-                            style: TextStyle(
-                                color: primaryGreen.withOpacity(0.9))),
-                        const SizedBox(height: 6),
-                        Text(_username,
-                            style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: primaryGreen)),
-                      ]),
-                  const SizedBox(width: 44),
-                ],
+              // Modern Greeting Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [primaryGreen, lightGreen],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primaryGreen.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Assalamu\'alaikum,',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _username,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.mosque, color: Colors.white, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _currentQuote,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontStyle: FontStyle.italic,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              // Quote / Recommendation card
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                  child: Row(children: [
-                    Icon(Icons.format_quote,
-                        color: primaryGreen.withOpacity(0.9)),
-                    const SizedBox(width: 10),
+              // Recommendation Card (Separated)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: accentGold.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.lightbulb, color: accentGold),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                                'Setiap hari adalah kesempatan untuk memperbaiki diri.',
-                                style: TextStyle(fontStyle: FontStyle.italic)),
-                            const SizedBox(height: 8),
-                            Text('Rekomendasi: $_recommendation',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: primaryGreen)),
-                          ]),
-                    ),
-                  ]),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Calendar card
-              Card(
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(dateStr,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Rekomendasi Puasa',
                             style: TextStyle(
-                                color: primaryGreen,
-                                fontWeight: FontWeight.w600)),
-                        IconButton(
-                            onPressed: () => _fetchTodayPrayerTimes(),
-                            icon: Icon(Icons.refresh, color: primaryGreen)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    TableCalendar(
-                      firstDay: DateTime.utc(2020, 1, 1),
-                      lastDay: DateTime.utc(2030, 12, 31),
-                      focusedDay: _focusedDay,
-                      calendarFormat: _format,
-                      onFormatChanged: (f) => setState(() => _format = f),
-                      selectedDayPredicate: (d) => isSameDay(_selectedDay, d),
-                      onDaySelected: (selected, focused) {
-                        setState(() {
-                          _selectedDay = selected;
-                          _focusedDay = focused;
-                        });
-                        _showDateDetail(selected);
-                      },
-                      onPageChanged: (focused) {
-                        _focusedDay = focused;
-                      },
-                      calendarBuilders: CalendarBuilders(
-                        defaultBuilder: (ctx, day, focusedDay) => _dayCell(day),
-                        todayBuilder: (ctx, day, focusedDay) =>
-                            _dayCell(day, isToday: true),
-                        selectedBuilder: (ctx, day, focusedDay) =>
-                            _dayCell(day, isSelected: true),
-                        markerBuilder: _markerBuilder,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _recommendation,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: primaryGreen,
+                            ),
+                          ),
+                        ],
                       ),
-                      headerStyle: const HeaderStyle(
-                          formatButtonVisible: false, titleCentered: true),
                     ),
-                  ]),
+                  ],
                 ),
               ),
 
               const SizedBox(height: 16),
 
-              // Quick prayer times with timezone dropdown
-              Card(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+              // Calendar Card
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(children: [
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            dateStr,
+                            style: TextStyle(
+                              color: primaryGreen,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _fetchTodayPrayerTimes(),
+                            icon: Icon(Icons.refresh, color: primaryGreen),
+                            style: IconButton.styleFrom(
+                              backgroundColor: primaryGreen.withOpacity(0.1),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TableCalendar(
+                        firstDay: DateTime.utc(2020, 1, 1),
+                        lastDay: DateTime.utc(2030, 12, 31),
+                        focusedDay: _focusedDay,
+                        calendarFormat: _format,
+                        onFormatChanged: (f) => setState(() => _format = f),
+                        selectedDayPredicate: (d) => isSameDay(_selectedDay, d),
+                        onDaySelected: (selected, focused) {
+                          setState(() {
+                            _selectedDay = selected;
+                            _focusedDay = focused;
+                          });
+                          _showDateDetail(selected);
+                        },
+                        onPageChanged: (focused) {
+                          _focusedDay = focused;
+                        },
+                        calendarBuilders: CalendarBuilders(
+                          defaultBuilder: (ctx, day, focusedDay) =>
+                              _dayCell(day),
+                          todayBuilder: (ctx, day, focusedDay) =>
+                              _dayCell(day, isToday: true),
+                          selectedBuilder: (ctx, day, focusedDay) =>
+                              _dayCell(day, isSelected: true),
+                          markerBuilder: _markerBuilder,
+                        ),
+                        headerStyle: const HeaderStyle(
+                          formatButtonVisible: false,
+                          titleCentered: true,
+                        ),
+                        calendarStyle: CalendarStyle(
+                          todayDecoration: BoxDecoration(
+                            color: lightGreen.withOpacity(0.3),
+                            shape: BoxShape.circle,
+                          ),
+                          selectedDecoration: BoxDecoration(
+                            color: primaryGreen,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Prayer Times Card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
                       children: [
-                        Icon(Icons.public, color: primaryGreen),
+                        Icon(Icons.public, color: primaryGreen, size: 20),
                         const SizedBox(width: 8),
-                        const Text('Zona waktu:'),
+                        const Text(
+                          'Zona waktu:',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
                               color: bgBeige,
                               borderRadius: BorderRadius.circular(10),
@@ -444,15 +695,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _timeCard('Imsak', displayImsak),
-                          _timeCard('Subuh', displaySubuh),
-                          _timeCard('Maghrib', displayMaghrib),
-                        ]),
-                  ]),
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _modernTimeCard('Imsak', displayImsak, Icons.dark_mode),
+                        _modernTimeCard(
+                            'Subuh', displaySubuh, Icons.wb_twilight),
+                        _modernTimeCard(
+                            'Maghrib', displayMaghrib, Icons.nights_stay),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -464,11 +718,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _dayCell(DateTime day,
       {bool isToday = false, bool isSelected = false}) {
-    final hijriDay = '';
     final bg = isSelected
         ? primaryGreen
-        : (isToday ? const Color(0xFFcfeadf) : Colors.transparent);
+        : (isToday ? lightGreen.withOpacity(0.3) : Colors.transparent);
     final txtColor = isSelected ? Colors.white : null;
+
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -479,47 +733,175 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       child: Container(
         margin: const EdgeInsets.all(4),
-        decoration:
-            BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+        ),
         alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('${day.day}',
-              style: TextStyle(fontWeight: FontWeight.w700, color: txtColor)),
-          if (hijriDay.isNotEmpty)
-            Text(hijriDay,
-                style: TextStyle(
-                    fontSize: 11, color: txtColor ?? Colors.grey[600])),
-        ]),
+        child: Text(
+          '${day.day}',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: txtColor,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _timeCard(String label, String value) {
-    return Column(children: [
-      Text(label, style: TextStyle(color: primaryGreen)),
-      const SizedBox(height: 6),
-      Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)
+  Widget _modernTimeCard(String label, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [primaryGreen.withOpacity(0.1), lightGreen.withOpacity(0.05)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: primaryGreen, size: 20),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: primaryGreen,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Dialog for selecting fasting types
+class _FastingTypesDialog extends StatefulWidget {
+  final DateTime date;
+  final List<String> currentTypes;
+
+  const _FastingTypesDialog({
+    required this.date,
+    required this.currentTypes,
+  });
+
+  @override
+  State<_FastingTypesDialog> createState() => _FastingTypesDialogState();
+}
+
+class _FastingTypesDialogState extends State<_FastingTypesDialog> {
+  late Set<String> _selectedTypes;
+  final _noteController = TextEditingController();
+
+  final List<String> _availableTypes = [
+    'Wajib (Ramadan)',
+    'Senin',
+    'Kamis',
+    'Ayyamul Bidh',
+    'Syawal',
+    'Dzulhijjah',
+    'Muharram',
+    'Sya\'ban',
+    'Daud',
+    'Nazar',
+    'Kafarat',
+    'Qadha',
+    'Lainnya',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTypes = Set.from(widget.currentTypes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        'Pilih Jenis Puasa',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(widget.date),
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Jenis Puasa:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _availableTypes.map((type) {
+                final isSelected = _selectedTypes.contains(type);
+                return FilterChip(
+                  label: Text(type),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedTypes.add(type);
+                      } else {
+                        _selectedTypes.remove(type);
+                      }
+                    });
+                  },
+                  selectedColor: const Color(0xFF4FB477).withOpacity(0.3),
+                  checkmarkColor: const Color(0xFF0b5a3a),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _noteController,
+              decoration: const InputDecoration(
+                labelText: 'Catatan (opsional)',
+                border: OutlineInputBorder(),
+                hintText: 'Tambahkan catatan...',
+              ),
+              maxLines: 3,
+            ),
           ],
         ),
-        child: Column(children: [
-          Text(value,
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 4),
-          Container(
-              height: 6,
-              width: 28,
-              decoration: BoxDecoration(
-                  color: accentGold, borderRadius: BorderRadius.circular(6))),
-        ]),
       ),
-    ]);
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context, {
+              'types': _selectedTypes.toList(),
+              'note': _noteController.text,
+            });
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0b5a3a),
+          ),
+          child: const Text('Simpan'),
+        ),
+      ],
+    );
   }
 }

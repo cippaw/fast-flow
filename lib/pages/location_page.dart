@@ -32,17 +32,17 @@ class _LocationPageState extends State<LocationPage> {
   String _subuh = "--:--";
   String _maghrib = "--:--";
 
-  // Doa fields
   String _doaJudul = "Memuat...";
   String _doaArab = "";
   String _doaLatin = "";
   String _doaTerjemah = "";
 
   final Color _darkGreen = const Color(0xFF0B3D2E);
+  final Color _lightGreen = const Color(0xFF4FB477);
   final Color _cream = const Color(0xFFF6F0E8);
   final Color _card = Colors.white;
+  final Color _accent = const Color(0xFFD0A84D);
 
-  // Timezone
   String _selectedZoneLabel = 'WIB (Asia/Jakarta)';
   final TimezoneService _tzService = TimezoneService();
 
@@ -125,7 +125,7 @@ class _LocationPageState extends State<LocationPage> {
       box.put('doa_terjemah', _doaTerjemah);
       box.put('updated', DateTime.now().toString());
     } catch (e) {
-      // ignore hive errors silently
+      // ignore
     }
   }
 
@@ -253,7 +253,7 @@ class _LocationPageState extends State<LocationPage> {
               point: LatLng(e['lat'], e['lon']),
               width: 40,
               height: 40,
-              child: const Icon(Icons.location_on, color: Colors.green),
+              child: const Icon(Icons.location_on, color: Color(0xFF4FB477)),
             ),
           );
         } else if (e['center'] != null && e['center']['lat'] != null) {
@@ -262,7 +262,7 @@ class _LocationPageState extends State<LocationPage> {
               point: LatLng(e['center']['lat'], e['center']['lon']),
               width: 40,
               height: 40,
-              child: const Icon(Icons.location_on, color: Colors.green),
+              child: const Icon(Icons.location_on, color: Color(0xFF4FB477)),
             ),
           );
         }
@@ -274,44 +274,29 @@ class _LocationPageState extends State<LocationPage> {
     } catch (_) {}
   }
 
-  Widget _sectionCard({required Widget child, EdgeInsetsGeometry? padding}) {
+  Widget _modernCard({required Widget child, EdgeInsetsGeometry? padding}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4))
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
         ],
       ),
       child: Padding(
-        padding: padding ?? const EdgeInsets.all(14),
+        padding: padding ?? const EdgeInsets.all(18),
         child: child,
       ),
     );
   }
 
-  Widget _labelValue(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-        const SizedBox(height: 6),
-        Text(value,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final textStyleHeading =
-        TextStyle(color: _darkGreen, fontWeight: FontWeight.w700, fontSize: 18);
-
-    // Convert waktu ke zona terpilih
     final today = DateTime.now();
     final displayImsak = _tzService.convertTimeFromJakarta(_imsak, today);
     final displaySubuh = _tzService.convertTimeFromJakarta(_subuh, today);
@@ -319,120 +304,204 @@ class _LocationPageState extends State<LocationPage> {
 
     return Scaffold(
       backgroundColor: _cream,
-      appBar: AppBar(
-        backgroundColor: _darkGreen,
-        elevation: 0,
-        title: const Text("Live Location & Jadwal"),
-        centerTitle: true,
-      ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: _darkGreen),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Mengambil lokasi...',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            )
           : _currentPosition == null
               ? const Center(child: Text("Mengambil lokasi..."))
-              : SafeArea(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Lokasi
-                        Text("Lokasi", style: textStyleHeading),
-                        const SizedBox(height: 8),
-                        _sectionCard(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: _darkGreen.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                padding: const EdgeInsets.all(8),
-                                child:
-                                    Icon(Icons.location_on, color: _darkGreen),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+              : CustomScrollView(
+                  slivers: [
+                    SliverAppBar(
+                      expandedHeight: 120,
+                      floating: false,
+                      pinned: true,
+                      backgroundColor: _darkGreen,
+                      flexibleSpace: FlexibleSpaceBar(
+                        title: const Text(
+                          "Live Location & Jadwal",
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        background: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [_darkGreen, _lightGreen],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.all(16),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate([
+                          // Location Card
+                          _modernCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
-                                    Text(
-                                      _address,
-                                      style: const TextStyle(
-                                          fontSize: 14, height: 1.4),
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            _lightGreen.withOpacity(0.2),
+                                            _darkGreen.withOpacity(0.1)
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Icon(Icons.location_on,
+                                          color: _darkGreen, size: 24),
                                     ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: _darkGreen,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Text(
+                                        'Lokasi Saat Ini',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: _lightGreen,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: const [
+                                          Icon(Icons.circle,
+                                              size: 8, color: Colors.white),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            'Live',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
-                                          child: const Text('Live',
-                                              style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 12)),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          "Lat: ${_currentPosition!.latitude.toStringAsFixed(5)}",
-                                          style: TextStyle(
-                                              color: Colors.grey[600],
-                                              fontSize: 12),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          "Lon: ${_currentPosition!.longitude.toStringAsFixed(5)}",
-                                          style: TextStyle(
-                                              color: Colors.grey[600],
-                                              fontSize: 12),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Timezone Selector
-                        Text("Zona Waktu", style: textStyleHeading),
-                        const SizedBox(height: 8),
-                        _sectionCard(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Icon(Icons.public, color: _darkGreen),
-                              const SizedBox(width: 12),
-                              const Text('Pilih Zona:',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w600)),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12),
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
                                     color: _cream,
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _address,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Icon(Icons.public,
+                                              size: 14,
+                                              color: Colors.grey[600]),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            "Lat: ${_currentPosition!.latitude.toStringAsFixed(5)}",
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            "Lon: ${_currentPosition!.longitude.toStringAsFixed(5)}",
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Timezone Selector
+                          _modernCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: _accent.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(Icons.schedule,
+                                          color: _accent, size: 20),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Zona Waktu',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                  decoration: BoxDecoration(
+                                    color: _cream,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: _darkGreen.withOpacity(0.1),
+                                    ),
                                   ),
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<String>(
                                       value: _selectedZoneLabel,
                                       isExpanded: true,
+                                      icon: Icon(Icons.arrow_drop_down,
+                                          color: _darkGreen),
                                       items: TimezoneService.zoneMap.keys
                                           .map((k) => DropdownMenuItem(
                                               value: k,
                                               child: Text(k,
                                                   style: const TextStyle(
-                                                      fontSize: 13))))
+                                                      fontSize: 14))))
                                           .toList(),
                                       onChanged: (v) async {
                                         if (v == null) return;
@@ -444,199 +513,355 @@ class _LocationPageState extends State<LocationPage> {
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
 
-                        // Jadwal
-                        Text("Jadwal", style: textStyleHeading),
-                        const SizedBox(height: 8),
-                        _sectionCard(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 12, horizontal: 14),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _labelValue("Imsak", displayImsak),
-                              _labelValue("Subuh", displaySubuh),
-                              _labelValue("Maghrib", displayMaghrib),
-                            ],
-                          ),
-                        ),
-
-                        // Doa
-                        _sectionCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: _darkGreen.withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(8),
+                          // Prayer Times
+                          _modernCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: _lightGreen.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(Icons.access_time,
+                                          color: _darkGreen, size: 20),
                                     ),
-                                    padding: const EdgeInsets.all(8),
-                                    child: Icon(Icons.menu_book,
-                                        color: _darkGreen),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text("Doa Hari Ini",
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Jadwal Sholat',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceAround,
+                                  children: [
+                                    _modernPrayerTime(
+                                        'Imsak', displayImsak, Icons.dark_mode),
+                                    Container(
+                                      width: 1,
+                                      height: 50,
+                                      color: Colors.grey[200],
+                                    ),
+                                    _modernPrayerTime('Subuh', displaySubuh,
+                                        Icons.wb_twilight),
+                                    Container(
+                                      width: 1,
+                                      height: 50,
+                                      color: Colors.grey[200],
+                                    ),
+                                    _modernPrayerTime('Maghrib', displayMaghrib,
+                                        Icons.nights_stay),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Doa Card
+                          _modernCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            _accent.withOpacity(0.3),
+                                            _accent.withOpacity(0.1)
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child:
+                                          Icon(Icons.menu_book, color: _accent),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Doa Hari Ini',
                                             style: TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                color: _darkGreen)),
-                                        if (_doaJudul.isNotEmpty)
-                                          Padding(
-                                            padding:
-                                                const EdgeInsets.only(top: 4.0),
-                                            child: Text(_doaJudul,
-                                                style: TextStyle(
-                                                    color: Colors.grey[700],
-                                                    fontSize: 12)),
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
                                           ),
-                                      ],
+                                          if (_doaJudul.isNotEmpty)
+                                            Text(
+                                              _doaJudul,
+                                              style: TextStyle(
+                                                color: Colors.grey[600],
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (_doaArab.isNotEmpty) ...[
+                                  const SizedBox(height: 16),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          _cream,
+                                          _cream.withOpacity(0.5)
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: _accent.withOpacity(0.2),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _doaArab,
+                                      textDirection: TextDirection.rtl,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.8,
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
                                 ],
-                              ),
-                              const SizedBox(height: 12),
-                              if (_doaArab.isNotEmpty)
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: _cream,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    _doaArab,
-                                    textDirection: TextDirection.rtl,
-                                    style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500),
-                                  ),
-                                ),
-                              if (_doaLatin.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(_doaLatin,
-                                      style:
-                                          TextStyle(color: Colors.grey[800])),
-                                ),
-                              if (_doaTerjemah.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(_doaTerjemah,
-                                      style:
-                                          TextStyle(color: Colors.grey[800])),
-                                ),
-                            ],
-                          ),
-                        ),
-
-                        // Map
-                        _sectionCard(
-                          padding: const EdgeInsets.all(6),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 6),
-                              SizedBox(
-                                height: 260,
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: FlutterMap(
-                                    mapController: _mapController,
-                                    options: MapOptions(
-                                      initialCenter: _currentPosition!,
-                                      initialZoom: 15,
+                                if (_doaLatin.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: _lightGreen.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
-                                    children: [
-                                      TileLayer(
-                                        urlTemplate:
-                                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                        userAgentPackageName:
-                                            'com.fastflow.app',
+                                    child: Text(
+                                      _doaLatin,
+                                      style: TextStyle(
+                                        color: _darkGreen,
+                                        fontStyle: FontStyle.italic,
+                                        fontSize: 13,
                                       ),
-                                      MarkerLayer(
-                                        markers: [
-                                          ..._mosqueMarkers,
-                                          Marker(
-                                            point: _currentPosition!,
-                                            width: 48,
-                                            height: 48,
-                                            child: Container(
-                                              alignment: Alignment.center,
+                                    ),
+                                  ),
+                                ],
+                                if (_doaTerjemah.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(Icons.translate,
+                                          size: 16, color: Colors.grey[600]),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _doaTerjemah,
+                                          style: TextStyle(
+                                            color: Colors.grey[700],
+                                            fontSize: 13,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+
+                          // Map Card
+                          _modernCard(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 6),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: _lightGreen.withOpacity(0.2),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(Icons.map,
+                                            color: _darkGreen, size: 18),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        'Peta Masjid Terdekat',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: SizedBox(
+                                    height: 280,
+                                    child: FlutterMap(
+                                      mapController: _mapController,
+                                      options: MapOptions(
+                                        initialCenter: _currentPosition!,
+                                        initialZoom: 15,
+                                      ),
+                                      children: [
+                                        TileLayer(
+                                          urlTemplate:
+                                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                          userAgentPackageName:
+                                              'com.fastflow.app',
+                                        ),
+                                        MarkerLayer(
+                                          markers: [
+                                            ..._mosqueMarkers,
+                                            Marker(
+                                              point: _currentPosition!,
+                                              width: 48,
+                                              height: 48,
                                               child: Container(
                                                 decoration: BoxDecoration(
                                                   color: Colors.redAccent,
                                                   shape: BoxShape.circle,
                                                   boxShadow: [
                                                     BoxShadow(
-                                                        color: Colors.black
-                                                            .withOpacity(0.2),
-                                                        blurRadius: 6)
+                                                      color: Colors.black
+                                                          .withOpacity(0.3),
+                                                      blurRadius: 8,
+                                                      spreadRadius: 2,
+                                                    )
                                                   ],
                                                 ),
                                                 padding:
-                                                    const EdgeInsets.all(6),
+                                                    const EdgeInsets.all(8),
                                                 child: const Icon(
                                                   Icons.my_location,
                                                   color: Colors.white,
-                                                  size: 20,
+                                                  size: 22,
                                                 ),
                                               ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: () {
+                                          if (_currentPosition != null) {
+                                            try {
+                                              _mapController.move(
+                                                  _currentPosition!, 16);
+                                            } catch (_) {}
+                                          }
+                                        },
+                                        icon: const Icon(Icons.my_location,
+                                            size: 18),
+                                        label: const Text('Pusatkan Peta'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: _darkGreen,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: _lightGreen.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.mosque,
+                                              size: 16, color: _lightGreen),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '${_mosqueMarkers.length} Masjid',
+                                            style: TextStyle(
+                                              color: _darkGreen,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                         ],
                                       ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      if (_currentPosition != null) {
-                                        try {
-                                          _mapController.move(
-                                              _currentPosition!, 16);
-                                        } catch (_) {}
-                                      }
-                                    },
-                                    icon: const Icon(Icons.my_location),
-                                    label: const Text("Center"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: _darkGreen,
-                                      shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(10)),
-                                      elevation: 0,
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    "Masjid terdekat ditandai",
-                                    style: TextStyle(
-                                        color: Colors.grey[700], fontSize: 13),
-                                  )
-                                ],
-                              )
-                            ],
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ]),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
     );
+  }
+
+  Widget _modernPrayerTime(String label, String time, IconData icon) {
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: _darkGreen.withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: _darkGreen, size: 18),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        label,
+        style: TextStyle(
+          color: Colors.grey[600],
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    ]);
   }
 }
