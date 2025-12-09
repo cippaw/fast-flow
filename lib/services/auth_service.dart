@@ -12,7 +12,7 @@ class AuthService {
   factory AuthService() => _instance;
 
   // Boxes
-  Box get _authBox => Hive.box('auth'); // store {salt, hash} by emailKey
+  Box get _authBox => Hive.box('auth');
   Box<UserModel> get _usersBox => Hive.box<UserModel>('users');
   Box get _sessionBox => Hive.box('session');
 
@@ -32,8 +32,7 @@ class AuthService {
   // ---------- Helpers ----------
   String _keyFromEmail(String email) => email.toLowerCase().trim();
 
-  // ---------- Public API (register/login/etc) ----------
-  /// Register new user. Returns true if success, false if email exists.
+  // ---------- Public API ----------
   Future<bool> register({
     required String username,
     required String email,
@@ -51,18 +50,16 @@ class AuthService {
     final user = UserModel(
       username: username,
       email: key,
-      password: '', // not storing plain password in model
+      password: '',
       profileImage: profileImage,
     );
 
     await _usersBox.put(key, user);
-    // set last_email for convenience (not marking logged in yet)
     await _sessionBox.put('last_email', key);
 
     return true;
   }
 
-  /// Login user. Returns true if credential match.
   Future<bool> login({required String email, required String password}) async {
     final key = _keyFromEmail(email);
     if (!_authBox.containsKey(key)) return false;
@@ -76,23 +73,35 @@ class AuthService {
 
     final inputHash = _hash(salt, password);
     if (inputHash == expected) {
-      // set session
       await _sessionBox.put('current_user', key);
       await _sessionBox.put('last_email', key);
+      await _sessionBox.put('is_logged_in', true);
       return true;
     }
     return false;
   }
 
-  /// Logout current user
   Future<void> logout() async {
     await _sessionBox.delete('current_user');
+    await _sessionBox.delete('is_logged_in');
+    // Hapus data sesi yang berhubungan dengan user
+    await _clearUserSessionData();
   }
 
-  /// Getter current logged-in email (or null)
+  /// Membersihkan data sesi yang tidak perlu disimpan antar login
+  Future<void> _clearUserSessionData() async {
+    final keysToKeep = ['last_email', 'selected_timezone'];
+    final allKeys = _sessionBox.keys.toList();
+
+    for (final key in allKeys) {
+      if (!keysToKeep.contains(key)) {
+        await _sessionBox.delete(key);
+      }
+    }
+  }
+
   String? get currentEmail => _sessionBox.get('current_user') as String?;
 
-  /// Get user data map by email (returns null if not found)
   Map<String, dynamic>? getUser(String email) {
     final key = _keyFromEmail(email);
     final user = _usersBox.get(key);
@@ -106,7 +115,6 @@ class AuthService {
     };
   }
 
-  /// Update profile: username and/or profileImage.
   Future<void> updateProfile(
     String email, {
     String? username,
@@ -124,7 +132,6 @@ class AuthService {
     await _usersBox.put(key, newUser);
   }
 
-  /// Utility: check if email already registered
   bool exists(String email) {
     final key = _keyFromEmail(email);
     return _authBox.containsKey(key);

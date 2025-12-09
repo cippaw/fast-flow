@@ -231,14 +231,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         MaterialPageRoute(
                             builder: (_) => const FastingHistoryPage())),
                   ),
-                  _menuButton(
-                    icon: Icons.notes_rounded,
-                    label: 'Riwayat Review Puasa',
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const FastingReviewHistoryPage())),
-                  ),
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,

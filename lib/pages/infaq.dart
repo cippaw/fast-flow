@@ -140,6 +140,7 @@ class _InfaqPageState extends State<InfaqPage> {
   }
 
   // ================= SIMPAN =================
+  // PERBAIKAN: Menambahkan prefix email untuk isolasi data per user
   Future<void> _processPayment(
     double amount,
     double rawAmount,
@@ -147,8 +148,16 @@ class _InfaqPageState extends State<InfaqPage> {
     String method,
   ) async {
     final date = DateTime.now();
+    final userKey = '${_currentUserEmail}_infaq_list';
 
-    await infaqBox.add({
+    // Ambil list existing untuk user ini
+    final existing = infaqBox.get(userKey, defaultValue: []) as List;
+    final updated = List<Map<String, dynamic>>.from(
+      existing.map((e) => Map<String, dynamic>.from(e as Map)),
+    );
+
+    // Tambahkan entry baru
+    updated.add({
       'user_email': _currentUserEmail,
       'amount': amount,
       'original_amount': rawAmount,
@@ -158,10 +167,12 @@ class _InfaqPageState extends State<InfaqPage> {
       'method': method,
     });
 
+    await infaqBox.put(userKey, updated);
+
     await NotificationService().showNotification(
       title: "Infaq Berhasil 🤲",
       body:
-          "Terima kasih, infaq Rp${amount.toStringAsFixed(0)} via $method berhasil.",
+          "Terima kasih, infaq ${_formatCurrency(rawAmount, _currency)} via $method berhasil.",
     );
 
     if (mounted) {
@@ -183,12 +194,26 @@ class _InfaqPageState extends State<InfaqPage> {
     setState(() {});
   }
 
+  // PERBAIKAN: Format mata uang sesuai dengan currency asli
+  String _formatCurrency(double amount, String currency) {
+    if (currency == 'IDR') {
+      return 'Rp${amount.toStringAsFixed(0)}';
+    } else if (currency == 'USD') {
+      return '\$${amount.toStringAsFixed(2)}';
+    } else if (currency == 'EUR') {
+      return '€${amount.toStringAsFixed(2)}';
+    } else if (currency == 'SGD') {
+      return 'S\$${amount.toStringAsFixed(2)}';
+    }
+    return '${amount.toStringAsFixed(2)} $currency';
+  }
+
   // ================= UI =================
   @override
   Widget build(BuildContext context) {
-    final List infaqList = infaqBox.values
-        .where((data) => data['user_email'] == _currentUserEmail)
-        .toList();
+    // PERBAIKAN: Ambil data infaq sesuai user yang login
+    final userKey = '${_currentUserEmail}_infaq_list';
+    final infaqList = infaqBox.get(userKey, defaultValue: []) as List;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F3E7),
@@ -216,7 +241,7 @@ class _InfaqPageState extends State<InfaqPage> {
             ),
             const SizedBox(height: 10),
             const Text(
-              '“Sedekah tidak akan mengurangi harta.” (HR. Muslim)',
+              '"Sedekah tidak akan mengurangi harta." (HR. Muslim)',
               style: TextStyle(
                 fontSize: 14,
                 fontStyle: FontStyle.italic,
@@ -309,7 +334,7 @@ class _InfaqPageState extends State<InfaqPage> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    if (_convertedToIdr != null)
+                    if (_convertedToIdr != null && _currency != 'IDR')
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
@@ -385,8 +410,17 @@ class _InfaqPageState extends State<InfaqPage> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemBuilder: (context, index) {
-                  final data = infaqList[index];
+                  final data =
+                      Map<String, dynamic>.from(infaqList[index] as Map);
                   final date = DateTime.parse(data['date']);
+
+                  // PERBAIKAN: Tampilkan dalam mata uang asli, bukan selalu IDR
+                  final originalAmount =
+                      (data['original_amount'] as num?)?.toDouble() ?? 0.0;
+                  final originalCurrency =
+                      data['original_currency'] as String? ?? 'IDR';
+                  final displayAmount =
+                      _formatCurrency(originalAmount, originalCurrency);
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -411,7 +445,7 @@ class _InfaqPageState extends State<InfaqPage> {
                             color: Color(0xFF0F3B2E)),
                       ),
                       title: Text(
-                        'Rp${(data['amount'] as double).toStringAsFixed(0)}',
+                        displayAmount,
                         style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF0F3B2E)),
@@ -427,15 +461,44 @@ class _InfaqPageState extends State<InfaqPage> {
                             'Metode: ${data['method']}',
                             style: const TextStyle(color: Colors.grey),
                           ),
+                          // Tampilkan konversi jika bukan IDR
+                          if (originalCurrency != 'IDR' &&
+                              data['amount'] != null)
+                            Text(
+                              '≈ Rp${(data['amount'] as num).toStringAsFixed(0)}',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
                         ],
                       ),
-                      trailing: Text(
-                        data['notes'].toString().isNotEmpty
-                            ? data['notes']
-                            : 'Tanpa catatan',
-                        style: const TextStyle(
-                            fontStyle: FontStyle.italic,
-                            color: Color(0xFF0F3B2E)),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (data['notes']?.toString().isNotEmpty == true)
+                            Expanded(
+                              child: Text(
+                                data['notes'],
+                                style: const TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                    color: Color(0xFF0F3B2E),
+                                    fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                              ),
+                            )
+                          else
+                            const Text(
+                              'Tanpa catatan',
+                              style: TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                  color: Colors.grey,
+                                  fontSize: 12),
+                            ),
+                        ],
                       ),
                     ),
                   );
