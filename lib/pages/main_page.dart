@@ -16,7 +16,7 @@ class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
 
   final List<Widget> _pages = const [
-    HomeScreen(),
+    HomeScreen(username: ''),
     LocationPage(),
     CountdownPage(),
     InfaqPage(),
@@ -53,7 +53,7 @@ class _MainPageState extends State<MainPage> {
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
-          backgroundColor: const Color.fromARGB(0, 201, 196, 196),
+          backgroundColor: const Color.fromARGB(0, 13, 60, 32),
           elevation: 0,
           selectedItemColor: colors.primary,
           unselectedItemColor: const Color.fromARGB(255, 246, 225, 181),
