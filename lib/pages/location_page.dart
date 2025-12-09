@@ -790,7 +790,8 @@ class _LocationPageState extends State<LocationPage> {
                                             } catch (_) {}
                                           }
                                         },
-                                        icon: const Icon(Icons.my_location,
+                                        icon: const Icon(
+                                            Icons.pin_drop_outlined,
                                             size: 18),
                                         label: const Text('Pusatkan Peta'),
                                         style: ElevatedButton.styleFrom(
