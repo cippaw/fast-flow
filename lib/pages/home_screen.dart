@@ -85,10 +85,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _ymd(DateTime dt) => DateFormat('yyyy-MM-dd').format(dt);
 
-  // Get multiple fasting types for a date
-  // Get multiple fasting types for a date
+  // PERBAIKAN: Tambahkan prefix email untuk isolasi data per user
+  String _getUserKey(String baseKey) {
+    if (_email == null) return baseKey;
+    return '${_email!}_$baseKey';
+  }
+
   Map<String, dynamic> getFastingData(DateTime day) {
-    final k = _ymd(day);
+    final k = _getUserKey(_ymd(day));
     final data = _fastingBox.get(k);
 
     if (data == null) return {'hasFasting': false, 'types': <String>[]};
@@ -115,11 +119,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _toggleFasting(DateTime day) async {
-    final k = _ymd(day);
+    final k = _getUserKey(_ymd(day));
     final currentData = getFastingData(day);
     final currentTypes = currentData['types'] as List<String>;
 
-    // Show dialog to select fasting types
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => _FastingTypesDialog(
@@ -227,7 +230,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showDateDetail(DateTime day) {
-    final k = _ymd(day);
+    final k = _getUserKey(_ymd(day));
     final note = _notesBox.get(k) as String?;
     final fastingData = getFastingData(day);
     final fasting = fastingData['hasFasting'] as bool;
@@ -501,7 +504,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 16),
 
-              // Recommendation Card (Separated)
+              // Recommendation Card
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -833,9 +836,9 @@ class _FastingTypesDialogState extends State<_FastingTypesDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(
+      title: const Text(
         'Pilih Jenis Puasa',
-        style: const TextStyle(fontWeight: FontWeight.bold),
+        style: TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SingleChildScrollView(
         child: Column(

@@ -5,6 +5,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:intl/intl.dart';
 import 'package:hive/hive.dart';
 import 'package:fast_flow/services/timezone_service.dart';
+import 'package:fast_flow/services/auth_service.dart';
 
 const Color darkGreen = Color(0xFF0F3D2E);
 const Color softGreen = Color(0xFF1F6F54);
@@ -36,6 +37,8 @@ class _CountdownPageState extends State<CountdownPage> {
 
   late Box _fastingBox;
   late Box _sessionBox;
+
+  String? get _currentUserEmail => AuthService().currentEmail;
 
   @override
   void initState() {
@@ -143,10 +146,14 @@ class _CountdownPageState extends State<CountdownPage> {
     });
   }
 
+  // PERBAIKAN: Tambahkan prefix email untuk isolasi data per user
   Future<void> _autoMarkFastingDay() async {
+    if (_currentUserEmail == null) return;
+
     try {
       final today = DateTime.now();
-      final key = DateFormat('yyyy-MM-dd').format(today);
+      final key =
+          '${_currentUserEmail}_${DateFormat('yyyy-MM-dd').format(today)}';
 
       // Mark as fasting day
       await _fastingBox.put(key, true);
