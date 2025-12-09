@@ -86,25 +86,28 @@ class _HomeScreenState extends State<HomeScreen> {
   String _ymd(DateTime dt) => DateFormat('yyyy-MM-dd').format(dt);
 
   // Get multiple fasting types for a date
+  // Get multiple fasting types for a date
   Map<String, dynamic> getFastingData(DateTime day) {
     final k = _ymd(day);
     final data = _fastingBox.get(k);
 
-    if (data == null) return {'hasFasting': false, 'types': []};
+    if (data == null) return {'hasFasting': false, 'types': <String>[]};
 
     if (data is bool) {
       return {
         'hasFasting': data,
-        'types': data ? ['Umum'] : []
+        'types': data ? <String>['Umum'] : <String>[]
       };
     }
 
     if (data is Map) {
-      final types = (data['types'] as List?)?.cast<String>() ?? [];
+      final types =
+          (data['types'] as List?)?.map((e) => e.toString()).toList() ??
+              <String>[];
       return {'hasFasting': types.isNotEmpty, 'types': types};
     }
 
-    return {'hasFasting': false, 'types': []};
+    return {'hasFasting': false, 'types': <String>[]};
   }
 
   bool isFastingDay(DateTime day) {
