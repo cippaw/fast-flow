@@ -15,6 +15,7 @@ class _FastingReviewPageState extends State<FastingReviewPage> {
   final _controller = TextEditingController();
   int _rating = 4;
   late Box _notesBox;
+  late Box _reviewHistoryBox;
   bool _loading = true;
 
   String get _key => DateFormat('yyyy-MM-dd').format(widget.date);
@@ -23,6 +24,15 @@ class _FastingReviewPageState extends State<FastingReviewPage> {
   void initState() {
     super.initState();
     _notesBox = Hive.box('fastingNotes');
+    _initReviewHistory();
+  }
+
+  Future<void> _initReviewHistory() async {
+    if (!Hive.isBoxOpen('reviewHistory')) {
+      _reviewHistoryBox = await Hive.openBox('reviewHistory');
+    } else {
+      _reviewHistoryBox = Hive.box('reviewHistory');
+    }
     _loadExisting();
   }
 
@@ -43,18 +53,92 @@ class _FastingReviewPageState extends State<FastingReviewPage> {
       'updated_at': DateTime.now().toIso8601String(),
     };
     await _notesBox.put(_key, payload);
+
+    // Add to review history
+    await _addToReviewHistory(note);
+
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Review disimpan.')));
     Navigator.pop(context, true);
   }
 
+  Future<void> _addToReviewHistory(String review) async {
+    try {
+      final existing = _reviewHistoryBox.get('list', defaultValue: []) as List;
+      final updated = List<Map<String, dynamic>>.from(
+        existing.map((e) => Map<String, dynamic>.from(e as Map)),
+      );
+
+      // Check if already exists for this date
+      final existingIndex = updated.indexWhere(
+        (item) =>
+            item['tanggal'] ==
+            DateFormat('d MMMM yyyy', 'id_ID').format(widget.date),
+      );
+
+      final newEntry = {
+        'tanggal': DateFormat('d MMMM yyyy', 'id_ID').format(widget.date),
+        'review': review,
+        'rating': _rating,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+
+      if (existingIndex >= 0) {
+        // Update existing
+        updated[existingIndex] = newEntry;
+      } else {
+        // Add new
+        updated.add(newEntry);
+      }
+
+      // Sort by date (newest first)
+      updated.sort((a, b) {
+        final dateA =
+            DateTime.tryParse(a['created_at'] ?? '') ?? DateTime.now();
+        final dateB =
+            DateTime.tryParse(b['created_at'] ?? '') ?? DateTime.now();
+        return dateB.compareTo(dateA);
+      });
+
+      await _reviewHistoryBox.put('list', updated);
+    } catch (e) {
+      debugPrint('Error adding to review history: $e');
+    }
+  }
+
   Future<void> _delete() async {
     await _notesBox.delete(_key);
+
+    // Remove from review history
+    await _removeFromReviewHistory();
+
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Review dihapus.')));
     Navigator.pop(context, true);
+  }
+
+  Future<void> _removeFromReviewHistory() async {
+    try {
+      final existing = _reviewHistoryBox.get('list', defaultValue: []) as List;
+      final updated = List<Map<String, dynamic>>.from(
+        existing.map((e) => Map<String, dynamic>.from(e as Map)),
+      );
+
+      final dateStr = DateFormat('d MMMM yyyy', 'id_ID').format(widget.date);
+      updated.removeWhere((item) => item['tanggal'] == dateStr);
+
+      await _reviewHistoryBox.put('list', updated);
+    } catch (e) {
+      debugPrint('Error removing from review history: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -105,7 +189,29 @@ class _FastingReviewPageState extends State<FastingReviewPage> {
                       label: const Text('Hapus',
                           style: TextStyle(color: Colors.redAccent)),
                     ),
-                ])
+                ]),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 16, color: Colors.blue.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Review akan otomatis masuk ke Riwayat Review Puasa',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.blue.shade700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ]),
             ),
     );

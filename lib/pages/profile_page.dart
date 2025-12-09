@@ -130,7 +130,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final imgProvider = _profileBytes != null
         ? MemoryImage(_profileBytes!)
-        : const AssetImage('assets/images/foto_biru_pas.jpg');
+        : const AssetImage('assets/images/default_profile.png');
 
     return Scaffold(
       backgroundColor: cream,

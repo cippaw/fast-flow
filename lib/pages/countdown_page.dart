@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:intl/intl.dart';
 import 'package:hive/hive.dart';
+import 'package:fast_flow/services/timezone_service.dart';
 
 const Color darkGreen = Color(0xFF0F3D2E);
 const Color softGreen = Color(0xFF1F6F54);
@@ -20,42 +21,37 @@ class CountdownPage extends StatefulWidget {
 class _CountdownPageState extends State<CountdownPage> {
   Timer? _timer;
 
-  /// state waktu/countdown
   Duration _remainingTime = Duration.zero;
   String formattedTime = "--:--:--";
-  String maghribTime = "17:55"; // sumber (diasumsikan jam maghrib di Jakarta)
+  String maghribTime = "17:55"; // default maghrib Jakarta
   bool _running = false;
 
-  double progress = 0.0; // 0..1 (0 = belum mulai, 1 = selesai)
+  double progress = 0.0;
 
-  /// waktu target dalam bentuk instan (UTC) — dihitung pada saat Start
   DateTime? _targetInstantUtc;
   Duration? _initialDurationAtStart;
 
-  /// zona
   String selectedZone = "WIB (Asia/Jakarta)";
-  final Map<String, String> zoneMap = {
-    'WIB (Asia/Jakarta)': 'Asia/Jakarta',
-    'WITA (Asia/Makassar)': 'Asia/Makassar',
-    'WIT (Asia/Jayapura)': 'Asia/Jayapura',
-    'London (Europe/London)': 'Europe/London',
-  };
+  final TimezoneService _tzService = TimezoneService();
 
-  // Hive session box (untuk menyimpan pilihan zone)
+  late Box _fastingBox;
   late Box _sessionBox;
 
   @override
   void initState() {
     super.initState();
-    // session box harus sudah di-open di main.dart
+    _fastingBox = Hive.box('fastingBox');
     _sessionBox = Hive.box('session');
 
-    final saved = _sessionBox.get('countdown_selected_zone') as String?;
-    if (saved != null && zoneMap.containsKey(saved)) {
-      selectedZone = saved;
+    // Load selected zone from service
+    selectedZone = _tzService.getSelectedZone();
+
+    // Load maghrib time from session if available
+    final savedMaghrib = _sessionBox.get('maghrib') as String?;
+    if (savedMaghrib != null && savedMaghrib.isNotEmpty) {
+      maghribTime = savedMaghrib;
     }
 
-    // initial display
     _setFormattedFromDuration(Duration.zero);
     progress = 0.0;
   }
@@ -67,48 +63,18 @@ class _CountdownPageState extends State<CountdownPage> {
     formattedTime = '${h}h ${m}m ${s}s';
   }
 
-  /// parse maghribTime (format "HH:mm") as Asia/Jakarta time for today,
-  /// then compute the target instant (UTC) for that maghrib.
   DateTime? _computeTargetInstantUtc() {
-    try {
-      final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(maghribTime);
-      if (match == null) return null;
-      final h = int.parse(match.group(1)!);
-      final m = int.parse(match.group(2)!);
-
-      final srcLoc = tz.getLocation('Asia/Jakarta');
-      final nowSrc = tz.TZDateTime.now(srcLoc);
-
-      // build TZDateTime in Asia/Jakarta for today's maghrib
-      // if maghrib already passed in Jakarta for today, keep it as today's time
-      // (so countdown will be zero/negative and immediately finish)
-      final maghribSrc =
-          tz.TZDateTime(srcLoc, nowSrc.year, nowSrc.month, nowSrc.day, h, m);
-
-      // return UTC instant of that maghrib
-      return maghribSrc.toUtc();
-    } catch (e) {
-      return null;
-    }
+    return _tzService.convertMaghribToTargetZone(maghribTime, DateTime.now());
   }
 
-  /// convert the maghrib instant (UTC) to a wall-clock string in chosen zone
-  String _maghribForZoneLabel(DateTime targetUtc, String zoneTzName) {
-    try {
-      final destLoc = tz.getLocation(zoneTzName);
-      final destDt = tz.TZDateTime.from(targetUtc, destLoc);
-      return DateFormat('HH:mm').format(destDt);
-    } catch (_) {
-      return maghribTime;
-    }
+  String _maghribForZoneLabel(DateTime targetUtc) {
+    return _tzService.formatMaghribForSelectedZone(targetUtc);
   }
 
-  /// Start countdown: compute target instant (once), then start periodic Timer.
   void _onStartPressed() {
     if (_running) return;
     final targetUtc = _computeTargetInstantUtc();
     if (targetUtc == null) {
-      // parsing failed
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Format maghrib tidak valid')));
       return;
@@ -118,7 +84,6 @@ class _CountdownPageState extends State<CountdownPage> {
     final remaining = targetUtc.difference(nowUtc);
 
     if (remaining <= Duration.zero) {
-      // already passed -> finish immediately
       setState(() {
         _running = false;
         _remainingTime = Duration.zero;
@@ -127,12 +92,12 @@ class _CountdownPageState extends State<CountdownPage> {
         _targetInstantUtc = targetUtc;
         _initialDurationAtStart = Duration.zero;
       });
+      _autoMarkFastingDay();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Waktu maghrib sudah lewat untuk hari ini')));
       return;
     }
 
-    // set initial values and start timer
     setState(() {
       _running = true;
       _targetInstantUtc = targetUtc;
@@ -148,7 +113,6 @@ class _CountdownPageState extends State<CountdownPage> {
       final rem = _targetInstantUtc!.difference(now);
 
       if (rem <= Duration.zero) {
-        // reached maghrib
         _timer?.cancel();
         setState(() {
           _running = false;
@@ -156,8 +120,12 @@ class _CountdownPageState extends State<CountdownPage> {
           _setFormattedFromDuration(_remainingTime);
           progress = 1.0;
         });
+
+        // Auto mark fasting day
+        _autoMarkFastingDay();
+
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Sudah maghrib — waktu berbuka!')));
+            const SnackBar(content: Text('Sudah maghrib — waktu berbuka! 🎉')));
         return;
       }
 
@@ -166,7 +134,6 @@ class _CountdownPageState extends State<CountdownPage> {
       setState(() {
         _remainingTime = rem;
         _setFormattedFromDuration(_remainingTime);
-        // progress: 1 - (remaining / initial)
         if (init.inSeconds > 0) {
           progress = (1.0 - (rem.inSeconds / init.inSeconds)).clamp(0.0, 1.0);
         } else {
@@ -174,6 +141,28 @@ class _CountdownPageState extends State<CountdownPage> {
         }
       });
     });
+  }
+
+  Future<void> _autoMarkFastingDay() async {
+    try {
+      final today = DateTime.now();
+      final key = DateFormat('yyyy-MM-dd').format(today);
+
+      // Mark as fasting day
+      await _fastingBox.put(key, true);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Hari puasa berhasil ditandai di kalender! ✓'),
+            backgroundColor: softGreen,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error auto-marking fasting day: $e');
+    }
   }
 
   void _onStopPressed() {
@@ -195,14 +184,14 @@ class _CountdownPageState extends State<CountdownPage> {
     });
   }
 
-  void _onZoneChanged(String? val) {
+  void _onZoneChanged(String? val) async {
     if (val == null) return;
-    if (!zoneMap.containsKey(val)) return;
+    if (!TimezoneService.zoneMap.containsKey(val)) return;
+
+    await _tzService.setSelectedZone(val);
     setState(() {
       selectedZone = val;
     });
-    // save to hive session
-    _sessionBox.put('countdown_selected_zone', val);
   }
 
   @override
@@ -255,12 +244,9 @@ class _CountdownPageState extends State<CountdownPage> {
 
   @override
   Widget build(BuildContext context) {
-    // compute maghrib display for selected zone (if target instant is known compute from that,
-    // otherwise convert today's maghribTime instant for clarity)
-    final tzName = zoneMap[selectedZone] ?? 'Asia/Jakarta';
     final maybeTargetUtc = _targetInstantUtc ?? _computeTargetInstantUtc();
     final maghribDisplay = maybeTargetUtc != null
-        ? _maghribForZoneLabel(maybeTargetUtc, tzName)
+        ? _maghribForZoneLabel(maybeTargetUtc)
         : maghribTime;
 
     return Scaffold(
@@ -275,7 +261,6 @@ class _CountdownPageState extends State<CountdownPage> {
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
         child: Column(
           children: [
-            // card
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(18),
@@ -300,7 +285,6 @@ class _CountdownPageState extends State<CountdownPage> {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        // background circle
                         SizedBox(
                           width: 220,
                           height: 220,
@@ -310,8 +294,6 @@ class _CountdownPageState extends State<CountdownPage> {
                             color: beige,
                           ),
                         ),
-
-                        // progress
                         SizedBox(
                           width: 220,
                           height: 220,
@@ -322,8 +304,6 @@ class _CountdownPageState extends State<CountdownPage> {
                             backgroundColor: beige,
                           ),
                         ),
-
-                        // center texts
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -363,7 +343,7 @@ class _CountdownPageState extends State<CountdownPage> {
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: selectedZone,
-                            items: zoneMap.keys
+                            items: TimezoneService.zoneMap.keys
                                 .map((k) => DropdownMenuItem(
                                     value: k,
                                     child: Text(k,
@@ -378,17 +358,39 @@ class _CountdownPageState extends State<CountdownPage> {
 
                   const SizedBox(height: 16),
 
-                  // controls
                   _buildControlButtons(),
 
                   const SizedBox(height: 12),
 
-                  // small helper row: show target UTC and local for debugging/clarity
                   if (maybeTargetUtc != null)
                     Text(
                       'Target (UTC): ${DateFormat('yyyy-MM-dd HH:mm').format(maybeTargetUtc.toUtc())}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
+
+                  const SizedBox(height: 8),
+
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: beige,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 16, color: darkGreen),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Countdown akan otomatis menandai hari puasa di kalender saat selesai',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: darkGreen.withOpacity(0.8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),

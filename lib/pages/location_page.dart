@@ -1,6 +1,8 @@
 // lib/pages/location_page.dart
+import 'dart:async';
 import 'dart:convert';
 import 'package:fast_flow/utils/permission_handler.dart';
+import 'package:fast_flow/services/timezone_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -18,7 +20,7 @@ class LocationPage extends StatefulWidget {
 
 class _LocationPageState extends State<LocationPage> {
   LatLng? _currentPosition;
-  Stream<Position>? _locationStream;
+  StreamSubscription<Position>? _locationStreamSubscription;
   final MapController _mapController = MapController();
 
   bool _isLoading = true;
@@ -40,50 +42,66 @@ class _LocationPageState extends State<LocationPage> {
   final Color _cream = const Color(0xFFF6F0E8);
   final Color _card = Colors.white;
 
+  // Timezone
+  String _selectedZoneLabel = 'WIB (Asia/Jakarta)';
+  final TimezoneService _tzService = TimezoneService();
+
   @override
   void initState() {
     super.initState();
+    _selectedZoneLabel = _tzService.getSelectedZone();
     initializeDateFormatting('id_ID', null).then((_) => _init());
+  }
+
+  @override
+  void dispose() {
+    _locationStreamSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _init() async {
     final perm = await PermissionHandler().requestLocationPermission(context);
     if (!perm) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
       return;
     }
 
     _loadFromHive();
 
-    _locationStream = Geolocator.getPositionStream(
+    _locationStreamSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 20,
       ),
-    );
-
-    _locationStream!.listen((pos) {
+    ).listen((pos) {
       _updateLocation(pos.latitude, pos.longitude);
     });
 
     try {
       final last = await Geolocator.getLastKnownPosition();
-      if (last != null)
+      if (last != null) {
         _updateLocation(last.latitude, last.longitude);
-      else {
+      } else {
         final curr = await Geolocator.getCurrentPosition();
         _updateLocation(curr.latitude, curr.longitude);
       }
     } catch (_) {}
 
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _updateLocation(double lat, double lon) async {
+    if (!mounted) return;
+
     setState(() => _currentPosition = LatLng(lat, lon));
     try {
       _mapController.move(_currentPosition!, 15);
     } catch (_) {}
+
     await _fetchAddress(lat, lon);
     await _fetchPrayerTimes(lat, lon);
     await _fetchNearbyMosques(lat, lon);
@@ -137,6 +155,9 @@ class _LocationPageState extends State<LocationPage> {
         if (list.isNotEmpty) {
           final idx = DateTime.now().day % list.length;
           final item = Map<String, dynamic>.from(list[idx]);
+
+          if (!mounted) return;
+
           setState(() {
             _doaJudul = item['judul'] ?? "Doa Hari Ini";
             _doaArab = item['arab'] ?? "";
@@ -153,11 +174,13 @@ class _LocationPageState extends State<LocationPage> {
   }
 
   void _setDoaFallback() {
+    if (!mounted) return;
+
     setState(() {
       if (_doaArab.isEmpty && _doaTerjemah.isEmpty && _doaLatin.isEmpty) {
         _doaJudul = "Doa Hari Ini";
         _doaArab =
-            "ٱللَّهُمَّ إِنِّي أَسْأَلُكَ خَيْرَ مَا سَأَلَكَ مِنْهُ عَبْدُكَ";
+            "ٱللَّهُمَّ إِنِّي أَسْأَلُكَ خَيْرَ مَا سَأَلَكَ مِنْهُ عَبْدُكَ";
         _doaLatin = "Allahumma inni as'aluka khaira ma sa'alaka minhu 'abduka";
         _doaTerjemah =
             "Ya Allah, aku memohon kebaikan yang pernah dimohon hamba-Mu.";
@@ -175,6 +198,8 @@ class _LocationPageState extends State<LocationPage> {
         final data = json.decode(res.body)['data'];
         final t = data['timings'];
         final h = data['date']['hijri'];
+
+        if (!mounted) return;
 
         setState(() {
           _imsak = t['Imsak'];
@@ -194,9 +219,13 @@ class _LocationPageState extends State<LocationPage> {
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final addr = data['display_name'] ?? "Tidak ditemukan";
+
+        if (!mounted) return;
+
         setState(() => _address = addr);
       }
     } catch (_) {
+      if (!mounted) return;
       setState(() => _address = "Tidak ditemukan");
     }
   }
@@ -239,11 +268,12 @@ class _LocationPageState extends State<LocationPage> {
         }
       }
 
+      if (!mounted) return;
+
       setState(() => _mosqueMarkers = markers);
     } catch (_) {}
   }
 
-  // ----------------- UI Helpers -----------------
   Widget _sectionCard({required Widget child, EdgeInsetsGeometry? padding}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -280,6 +310,13 @@ class _LocationPageState extends State<LocationPage> {
   Widget build(BuildContext context) {
     final textStyleHeading =
         TextStyle(color: _darkGreen, fontWeight: FontWeight.w700, fontSize: 18);
+
+    // Convert waktu ke zona terpilih
+    final today = DateTime.now();
+    final displayImsak = _tzService.convertTimeFromJakarta(_imsak, today);
+    final displaySubuh = _tzService.convertTimeFromJakarta(_subuh, today);
+    final displayMaghrib = _tzService.convertTimeFromJakarta(_maghrib, today);
+
     return Scaffold(
       backgroundColor: _cream,
       appBar: AppBar(
@@ -365,6 +402,53 @@ class _LocationPageState extends State<LocationPage> {
                           ),
                         ),
 
+                        // Timezone Selector
+                        Text("Zona Waktu", style: textStyleHeading),
+                        const SizedBox(height: 8),
+                        _sectionCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              Icon(Icons.public, color: _darkGreen),
+                              const SizedBox(width: 12),
+                              const Text('Pilih Zona:',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.w600)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: _cream,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _selectedZoneLabel,
+                                      isExpanded: true,
+                                      items: TimezoneService.zoneMap.keys
+                                          .map((k) => DropdownMenuItem(
+                                              value: k,
+                                              child: Text(k,
+                                                  style: const TextStyle(
+                                                      fontSize: 13))))
+                                          .toList(),
+                                      onChanged: (v) async {
+                                        if (v == null) return;
+                                        await _tzService.setSelectedZone(v);
+                                        setState(() {
+                                          _selectedZoneLabel = v;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
                         // Jadwal
                         Text("Jadwal", style: textStyleHeading),
                         const SizedBox(height: 8),
@@ -374,9 +458,9 @@ class _LocationPageState extends State<LocationPage> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              _labelValue("Imsak", _imsak),
-                              _labelValue("Subuh", _subuh),
-                              _labelValue("Maghrib", _maghrib),
+                              _labelValue("Imsak", displayImsak),
+                              _labelValue("Subuh", displaySubuh),
+                              _labelValue("Maghrib", displayMaghrib),
                             ],
                           ),
                         ),

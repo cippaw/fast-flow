@@ -5,9 +5,9 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'package:hive/hive.dart';
-import 'package:timezone/timezone.dart' as tz;
 
 import 'package:fast_flow/services/auth_service.dart';
+import 'package:fast_flow/services/timezone_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,63 +16,45 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Appearance colors (brand)
   final Color primaryGreen = const Color(0xFF0b5a3a);
   final Color accentGold = const Color(0xFFD0A84D);
   final Color bgBeige = const Color(0xFFF5F5F0);
 
-  // Calendar state
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   CalendarFormat _format = CalendarFormat.month;
 
-  // Boxes (opened in main.dart)
-  late Box _fastingBox; // stores bool keyed by 'yyyy-MM-dd'
-  late Box _notesBox; // stores string notes by 'yyyy-MM-dd'
+  late Box _fastingBox;
+  late Box _notesBox;
   late Box _sessionBox;
 
-  // Prayer times (raw strings from Aladhan - assumed Asia/Jakarta source)
   String _imsak = '--:--';
   String _subuh = '--:--';
   String _maghrib = '--:--';
 
-  // Hijri (for recommendation)
   int? _hijriDay;
   String? _hijriMonthEn;
   String? _hijriYear;
 
-  // User info
   String _username = 'User';
   String? _email;
 
-  // timezone zones map (label -> tz name)
-  final Map<String, String> _zones = {
-    'WIB (Asia/Jakarta)': 'Asia/Jakarta',
-    'WITA (Asia/Makassar)': 'Asia/Makassar',
-    'WIT (Asia/Jayapura)': 'Asia/Jayapura',
-    'London (Europe/London)': 'Europe/London',
-  };
   String _selectedZoneLabel = 'WIB (Asia/Jakarta)';
+  final TimezoneService _tzService = TimezoneService();
 
-  // recommendation text
   String _recommendation = 'Perbanyak amal sholeh';
 
   @override
   void initState() {
     super.initState();
 
-    // open boxes (main.dart should already have opened them)
     _fastingBox = Hive.box('fastingBox');
     _notesBox = Hive.box('fastingNotes');
     _sessionBox = Hive.box('session');
 
-    // load selected zone if saved
-    final savedZone = _sessionBox.get('selected_zone') as String?;
-    if (savedZone != null && _zones.containsKey(savedZone)) {
-      _selectedZoneLabel = savedZone;
-    }
+    // Load selected zone
+    _selectedZoneLabel = _tzService.getSelectedZone();
 
-    // load current user from AuthService if any
     final auth = AuthService();
     _email = auth.currentEmail;
     if (_email != null) {
@@ -83,7 +65,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchTodayPrayerTimes();
   }
 
-  // helpers
   String _ymd(DateTime dt) => DateFormat('yyyy-MM-dd').format(dt);
 
   bool isFastingDay(DateTime day) {
@@ -138,9 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- Prayer times & hijri fetch (Aladhan) ---
   Future<void> _fetchTodayPrayerTimes() async {
-    // default coordinates Jakarta; kamu bisa ubah ke lokasi user jika mau
     const double lat = -6.200000;
     const double lon = 106.816666;
 
@@ -160,7 +139,9 @@ class _HomeScreenState extends State<HomeScreen> {
           _subuh = (timings['Fajr'] ?? '--:--').toString();
           _maghrib = (timings['Maghrib'] ?? '--:--').toString();
 
-          // hijri info for recommendation
+          // Save to session for countdown
+          _sessionBox.put('maghrib', _maghrib);
+
           try {
             _hijriDay = int.tryParse((hijri['day'] ?? '').toString());
             _hijriMonthEn = (hijri['month']?['en'] ?? '').toString();
@@ -176,23 +157,15 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       debugPrint('Error fetching prayer times: $e');
     }
-    Text("Tahun Hijriah: $_hijriYear");
   }
 
-  // Compute recommendation (basic rules)
   void _computeRecommendation() {
     final today = DateTime.now();
-    final wd = today.weekday; // Mon=1 ... Sun=7
+    final wd = today.weekday;
 
     final hijriDay = _hijriDay;
     final hijriMonth = _hijriMonthEn?.toLowerCase() ?? '';
 
-    // Base rules:
-    // - Senin / Kamis => sunnah
-    // - Hari putih (13,14,15) => sunnah Ayyamul Bidh
-    // - 10 Muharram => Ashura
-    // - 9 Dhu al-Hijjah => Arafah (if applicable)
-    // - 15 Sha'ban => nisfu Sya'ban (recommended)
     final buf = <String>[];
 
     if (wd == DateTime.monday) buf.add('Puasa Sunnah: Senin');
@@ -200,22 +173,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (hijriDay != null) {
       if (hijriDay == 13 || hijriDay == 14 || hijriDay == 15) {
-        buf.add('Puasa Sunnah: Ayyamul Bidh (${hijriDay})');
+        buf.add('Puasa Sunnah: Ayyamul Bidh ($hijriDay)');
       }
 
-      // ashura: 10 Muharram
       if (hijriDay == 10 && hijriMonth.contains('muharram')) {
         buf.add('Puasa Sunnah: Ashura (10 Muharram)');
       }
 
-      // arafah: 9 Dhu al-Hijjah
-      if (hijriDay == 9 && hijriMonth.contains('dhul') ||
-          hijriMonth.contains('dhu')) {
-        // basic detection for Dhu al-Hijjah month names
+      if (hijriDay == 9 &&
+          (hijriMonth.contains('dhul') || hijriMonth.contains('dhu'))) {
         buf.add('Puasa Sunnah: Arafah (9 Dhu al-Hijjah)');
       }
 
-      // nisfu sya'ban (15 Sha\'ban)
       if (hijriDay == 15 && hijriMonth.contains('sha')) {
         buf.add('Puasa Sunnah: Nisfu Sya\'ban (15 Sha\'ban)');
       }
@@ -230,30 +199,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Convert time string (from Aladhan e.g. "04:26 ( +07 )" or "04:26") from Asia/Jakarta to target zone
-  String _convertTimeForZone(
-      String timeStr, String targetZoneTzName, DateTime reference) {
-    try {
-      final match = RegExp(r'(\d{1,2}:\d{2})').firstMatch(timeStr);
-      if (match == null) return timeStr;
-      final hhmm = match.group(1)!;
-      final parts = hhmm.split(':');
-      final h = int.parse(parts[0]);
-      final m = int.parse(parts[1]);
-
-      final srcLoc =
-          tz.getLocation('Asia/Jakarta'); // original data assumed Jakarta
-      final srcTzDt = tz.TZDateTime(
-          srcLoc, reference.year, reference.month, reference.day, h, m);
-      final destLoc = tz.getLocation(targetZoneTzName);
-      final dest = tz.TZDateTime.from(srcTzDt.toUtc(), destLoc);
-      return DateFormat('HH:mm').format(dest);
-    } catch (e) {
-      return timeStr;
-    }
-  }
-
-  // show date detail
   void _showDateDetail(DateTime day) {
     final k = _ymd(day);
     final note = _notesBox.get(k) as String?;
@@ -316,7 +261,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Calendar marker builder shows small dot when fasting
   Widget? _markerBuilder(BuildContext ctx, DateTime date, List events) {
     if (isFastingDay(date)) {
       return const Positioned(
@@ -331,14 +275,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final dateStr = DateFormat('MMMM yyyy', 'id_ID').format(_focusedDay);
 
-    // prepare zone target tz name
-    final zoneTz = _zones[_selectedZoneLabel] ?? 'Asia/Jakarta';
-
-    // convert quick times for display according to selected zone
-    final displayImsak = _convertTimeForZone(_imsak, zoneTz, DateTime.now());
-    final displaySubuh = _convertTimeForZone(_subuh, zoneTz, DateTime.now());
-    final displayMaghrib =
-        _convertTimeForZone(_maghrib, zoneTz, DateTime.now());
+    // Convert times to selected zone
+    final today = DateTime.now();
+    final displayImsak = _tzService.convertTimeFromJakarta(_imsak, today);
+    final displaySubuh = _tzService.convertTimeFromJakarta(_subuh, today);
+    final displayMaghrib = _tzService.convertTimeFromJakarta(_maghrib, today);
 
     return Scaffold(
       backgroundColor: bgBeige,
@@ -349,14 +290,14 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Greeting (profile avatar removed)
+              // Greeting
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Assalamu’alaikum,',
+                        Text('Assalamu\'alaikum,',
                             style: TextStyle(
                                 color: primaryGreen.withOpacity(0.9))),
                         const SizedBox(height: 6),
@@ -366,7 +307,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fontWeight: FontWeight.bold,
                                 color: primaryGreen)),
                       ]),
-                  // intentionally left blank to remove profile avatar
                   const SizedBox(width: 44),
                 ],
               ),
@@ -460,7 +400,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 16),
 
-              // Quick prayer times card with timezone dropdown
+              // Quick prayer times with timezone dropdown
               Card(
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -473,19 +413,34 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 8),
                         const Text('Zona waktu:'),
                         const SizedBox(width: 8),
-                        DropdownButton<String>(
-                          value: _selectedZoneLabel,
-                          items: _zones.keys
-                              .map((k) =>
-                                  DropdownMenuItem(value: k, child: Text(k)))
-                              .toList(),
-                          onChanged: (v) {
-                            if (v == null) return;
-                            setState(() {
-                              _selectedZoneLabel = v;
-                              _sessionBox.put('selected_zone', v);
-                            });
-                          },
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: bgBeige,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedZoneLabel,
+                                isExpanded: true,
+                                items: TimezoneService.zoneMap.keys
+                                    .map((k) => DropdownMenuItem(
+                                        value: k,
+                                        child: Text(k,
+                                            style:
+                                                const TextStyle(fontSize: 13))))
+                                    .toList(),
+                                onChanged: (v) async {
+                                  if (v == null) return;
+                                  await _tzService.setSelectedZone(v);
+                                  setState(() {
+                                    _selectedZoneLabel = v;
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -509,7 +464,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _dayCell(DateTime day,
       {bool isToday = false, bool isSelected = false}) {
-    final hijriDay = ''; // optional: future enhancement
+    final hijriDay = '';
     final bg = isSelected
         ? primaryGreen
         : (isToday ? const Color(0xFFcfeadf) : Colors.transparent);
