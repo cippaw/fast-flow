@@ -881,7 +881,7 @@ class _FastingTypesDialogState extends State<_FastingTypesDialog> {
             TextField(
               controller: _noteController,
               decoration: const InputDecoration(
-                labelText: 'Catatan (opsional)',
+                labelText: 'Note harimu di sini',
                 border: OutlineInputBorder(),
                 hintText: 'Tambahkan catatan...',
               ),
