@@ -16,9 +16,8 @@ class _KesanPesanPageState extends State<KesanPesanPage> {
   final List<Map<String, String>> _exampleBoxes = const [
     {
       'matkul': 'Pemrograman Aplikasi Mobile',
-      'dosen': 'Bapak Bagus Muhammad Akbar, S.ST., M.Kom.',
       'kesan':
-          'Kelas sangat menyenangkan namun cukup menantang ketika mengerjakan tugas projek.',
+          'Mata kuliah Mobile benar-benar jadi salah satu pengalaman paling ngena semester ini. Dari yang awalnya cuma lihat aplikasi di HP tanpa mikir, sampai akhirnya bisa bikin layar berpindah, data nyangkut, API nyala—rasanya kayak buka pintu dunia baru. Kadang pusing, kadang pengen nyerah, kadang laptop hampir dilempar… tapi begitu fitur akhirnya jalan, beuh, puasnya kayak ngebobol WiFi tetangga.Yang bikin makin asik, penjelasan tiap materi disajikan dengan ritme yang pas—nggak terlalu cepat, nggak terlalu lambat—jadi feel-nya bukan cuma belajar, tapi benar-benar naik level sebagai developer.',
       'saran':
           'Pertahankan ciri khas mata kuliah ini dan tambahkan lebih banyak teori setelah tugas/kuis.'
     },
@@ -144,7 +143,7 @@ class _KesanPesanPageState extends State<KesanPesanPage> {
               Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  "— Mahasiswa",
+                  "— Syfa",
                   style: TextStyle(color: Colors.grey[500], fontSize: 12),
                 ),
               ),
